@@ -16,8 +16,8 @@
     "start:worker": "nest start worker",
     "start:worker:dev": "nest start worker --watch",
     "lint": "eslint \"{apps,libs}/**/*.ts\" --fix",
-    "clean": "rimraf dist tmpclaude-* .claude",
-    "clean:tmp": "rimraf tmpclaude-* .claude",
+    "clean": "rimraf dist && node -e \"require('fs').readdirSync('.').filter(f=>f.startsWith('tmpclaude-')||f==='.claude').forEach(f=>require('fs').rmSync(f,{recursive:true,force:true}))\"",
+    "clean:tmp": "node -e \"require('fs').readdirSync('.').filter(f=>f.startsWith('tmpclaude-')||f==='.claude').forEach(f=>require('fs').rmSync(f,{recursive:true,force:true}))\"",
     "push": "npm run clean:tmp && git push"
   },
   "dependencies": {
