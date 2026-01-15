@@ -1,34 +1,28 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { Job, JobStatus } from '@app/common';
 import { CreateJobDto, UpdateJobDto } from './dto';
+import { IJobsRepository } from './repositories';
 
 @Injectable()
 export class JobsService {
-  constructor(
-    @InjectRepository(Job)
-    private readonly jobRepository: Repository<Job>,
-  ) {}
+  constructor(private readonly jobsRepository: IJobsRepository) {}
 
   async create(createJobDto: CreateJobDto): Promise<Job> {
-    const job = this.jobRepository.create({
+    const job = this.jobsRepository.create({
       type: createJobDto.type,
       payload: createJobDto.payload,
       maxRetries: createJobDto.maxRetries ?? 3,
       status: JobStatus.QUEUED,
     });
-    return this.jobRepository.save(job);
+    return this.jobsRepository.save(job);
   }
 
   async findAll(): Promise<Job[]> {
-    return this.jobRepository.find({
-      order: { createdAt: 'DESC' },
-    });
+    return this.jobsRepository.findAllOrderByCreatedAt('DESC');
   }
 
   async findOne(id: string): Promise<Job> {
-    const job = await this.jobRepository.findOne({ where: { id } });
+    const job = await this.jobsRepository.findById(id);
     if (!job) {
       throw new NotFoundException(`Job with ID ${id} not found`);
     }
@@ -36,10 +30,7 @@ export class JobsService {
   }
 
   async findByStatus(status: JobStatus): Promise<Job[]> {
-    return this.jobRepository.find({
-      where: { status },
-      order: { createdAt: 'ASC' },
-    });
+    return this.jobsRepository.findByStatus(status);
   }
 
   async update(id: string, updateJobDto: UpdateJobDto): Promise<Job> {
@@ -69,7 +60,7 @@ export class JobsService {
       job.errorMessage = updateJobDto.errorMessage;
     }
 
-    return this.jobRepository.save(job);
+    return this.jobsRepository.save(job);
   }
 
   async retry(id: string): Promise<Job> {
@@ -79,29 +70,35 @@ export class JobsService {
       throw new Error('Max retries exceeded');
     }
 
-    job.retryCount += 1;
-    job.status = JobStatus.RETRYING;
-    job.errorMessage = null;
+    const retriedJob = await this.jobsRepository.incrementRetryCount(id);
+    if (!retriedJob) {
+      throw new NotFoundException(`Job with ID ${id} not found`);
+    }
 
-    return this.jobRepository.save(job);
+    return retriedJob;
   }
 
   async delete(id: string): Promise<void> {
-    const job = await this.findOne(id);
-    await this.jobRepository.remove(job);
+    const deleted = await this.jobsRepository.delete(id);
+    if (!deleted) {
+      throw new NotFoundException(`Job with ID ${id} not found`);
+    }
   }
 
   async getStats(): Promise<Record<string, number>> {
-    const stats = await this.jobRepository
-      .createQueryBuilder('job')
-      .select('job.status', 'status')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('job.status')
-      .getRawMany<{ status: string; count: string }>();
+    return this.jobsRepository.getStats();
+  }
 
-    return stats.reduce<Record<string, number>>((acc, { status, count }) => {
-      acc[status] = parseInt(count, 10);
-      return acc;
-    }, {});
+  // Worker-specific methods
+  async acquireNextJob(): Promise<Job | null> {
+    const pendingJob = await this.jobsRepository.findNextPendingJob();
+    if (!pendingJob) {
+      return null;
+    }
+    return this.jobsRepository.acquireJob(pendingJob.id);
+  }
+
+  async getQueueLength(): Promise<number> {
+    return this.jobsRepository.getQueueLength();
   }
 }

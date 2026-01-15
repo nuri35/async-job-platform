@@ -147,7 +147,7 @@ Bu API, asenkron iş kuyruğu yönetimi için tasarlanmıştır.
 
   // Health Check Endpoint
   const fastifyInstance = app.getHttpAdapter().getInstance();
-  fastifyInstance.get('/_health', async () => ({
+  fastifyInstance.get('/_health', () => ({
     status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),

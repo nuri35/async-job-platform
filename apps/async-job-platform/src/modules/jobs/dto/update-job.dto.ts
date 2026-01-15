@@ -1,5 +1,13 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsObject, IsNumber, IsString, Min, Max } from 'class-validator';
+import {
+  IsEnum,
+  IsOptional,
+  IsObject,
+  IsNumber,
+  IsString,
+  Min,
+  Max,
+} from 'class-validator';
 import { JobStatus } from '@app/common';
 
 export class UpdateJobDto {
@@ -15,7 +23,10 @@ export class UpdateJobDto {
   @Max(100)
   progress?: number;
 
-  @ApiPropertyOptional({ description: 'Job result data', additionalProperties: true })
+  @ApiPropertyOptional({
+    description: 'Job result data',
+    additionalProperties: true,
+  })
   @IsOptional()
   @IsObject()
   result?: Record<string, unknown>;
