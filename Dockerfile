@@ -6,12 +6,12 @@ RUN apk add --no-cache libc6-compat
 # Dependencies stage
 FROM base AS deps
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm install --omit=dev --legacy-peer-deps
 
 # Builder stage
 FROM base AS builder
 COPY package*.json ./
-RUN npm ci
+RUN npm install --legacy-peer-deps
 COPY . .
 RUN npm run build && npm run build:worker
 
