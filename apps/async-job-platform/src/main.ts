@@ -10,6 +10,7 @@ import fastifyCors from '@fastify/cors';
 import fastifyCompress from '@fastify/compress';
 import fastifyCookie from '@fastify/cookie';
 import fastifyRateLimit from '@fastify/rate-limit';
+import fastifyCsrf from '@fastify/csrf-protection';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -32,10 +33,40 @@ async function bootstrap() {
     defaultVersion: '1',
   });
 
-  // Security - Helmet
+  // Security - Helmet (Advanced Configuration)
   await app.register(helmet, {
-    contentSecurityPolicy: process.env.NODE_ENV === 'production',
+    contentSecurityPolicy:
+      process.env.NODE_ENV === 'production'
+        ? {
+            directives: {
+              defaultSrc: ["'self'"],
+              styleSrc: ["'self'", "'unsafe-inline'"],
+              imgSrc: ["'self'", 'data:', 'https:'],
+              scriptSrc: ["'self'"],
+              objectSrc: ["'none'"],
+              upgradeInsecureRequests: [],
+            },
+          }
+        : false,
     crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: { policy: 'same-origin' },
+    crossOriginResourcePolicy: { policy: 'same-origin' },
+    dnsPrefetchControl: { allow: false },
+    frameguard: { action: 'deny' },
+    hsts:
+      process.env.NODE_ENV === 'production'
+        ? {
+            maxAge: 31536000,
+            includeSubDomains: true,
+            preload: true,
+          }
+        : false,
+    ieNoOpen: true,
+    noSniff: true,
+    originAgentCluster: true,
+    permittedCrossDomainPolicies: { permittedPolicies: 'none' },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    xssFilter: true,
   });
 
   // CORS
@@ -61,24 +92,37 @@ async function bootstrap() {
     secret: process.env.COOKIE_SECRET || 'cookie-secret-change-in-production',
   });
 
-  // Rate Limiting
-  await app.register(fastifyRateLimit, {
-    max: 100,
-    timeWindow: '15 minutes',
-    skipOnError: true,
-    keyGenerator: (request) => {
-      return (
-        request.headers['x-forwarded-for']?.toString() ||
-        request.ip ||
-        'unknown'
-      );
+  // CSRF Protection
+  await app.register(fastifyCsrf, {
+    sessionPlugin: '@fastify/cookie',
+    cookieOpts: {
+      signed: true,
+      httpOnly: true,
+      sameSite: 'strict',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
     },
-    errorResponseBuilder: () => ({
-      statusCode: 429,
-      error: 'Too Many Requests',
-      message: 'Rate limit exceeded. Please try again later.',
-    }),
   });
+
+  // Rate Limiting
+  // todo zaten bakacagız buna ayrıca hem global hem yaptıklarımız bazında
+  // await app.register(fastifyRateLimit, {
+  //   max: 100,
+  //   timeWindow: '15 minutes',
+  //   skipOnError: true,
+  //   keyGenerator: (request) => {
+  //     return (
+  //       request.headers['x-forwarded-for']?.toString() ||
+  //       request.ip ||
+  //       'unknown'
+  //     );
+  //   },
+  //   errorResponseBuilder: () => ({
+  //     statusCode: 429,
+  //     error: 'Too Many Requests',
+  //     message: 'Rate limit exceeded. Please try again later.',
+  //   }),
+  // });
 
   // Global Validation Pipe
   app.useGlobalPipes(
