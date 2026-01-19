@@ -10,6 +10,7 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,13 +22,17 @@ import {
 import { Job, JobStatus } from '@app/common';
 import { JobsService } from './jobs.service';
 import { CreateJobDto, UpdateJobDto } from './dto';
+import { RateLimit } from '../../common/decorators';
+import { RateLimitGuard } from '../../common/guards';
 
 @ApiTags('Jobs')
 @Controller('jobs')
+@UseGuards(RateLimitGuard)
 export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
 
   @Post()
+  @RateLimit({ max: 10, timeWindow: '1 minute' })
   @ApiOperation({ summary: 'Create a new job' })
   @ApiResponse({ status: 201, description: 'Job created successfully' })
   async create(@Body() createJobDto: CreateJobDto): Promise<Job> {
@@ -74,6 +79,7 @@ export class JobsController {
   }
 
   @Post(':id/retry')
+  @RateLimit({ max: 5, timeWindow: '1 minute' })
   @ApiOperation({ summary: 'Retry a failed job' })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Job queued for retry' })
