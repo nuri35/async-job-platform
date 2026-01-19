@@ -18,4 +18,3 @@ import { JobsRepository, IJobsRepository } from './repositories';
   exports: [JobsService, IJobsRepository],
 })
 export class JobsModule {}
-//  token olarak ımport ettık mesela cırculara uygunmu normal moduller ııcn ımporta dıkkat ederdık ya..

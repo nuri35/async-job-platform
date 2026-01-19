@@ -45,6 +45,12 @@ Implemented using:
 - **Decorator**: `@RateLimit({ max: number, timeWindow: string })`
 - **Guard**: `RateLimitGuard` - Enforces the rate limit based on decorator metadata
 
+**⚠️ Production Considerations:**
+- The current implementation uses in-memory storage for per-endpoint rate limits
+- For multi-instance deployments, consider migrating to Redis or another distributed cache
+- The in-memory store is cleaned up every 5 minutes to prevent memory leaks
+- Global rate limiting via `@fastify/rate-limit` works correctly in multi-instance setups when using Redis
+
 ## Usage
 
 To add rate limiting to a new endpoint:
@@ -92,6 +98,7 @@ Rate limiting events are logged:
 - Warning when approaching limit
 - Warning when limit exceeded
 - Logs include IP address for troubleshooting
+- Cleanup logs show number of expired entries removed
 
 ## Testing
 
@@ -100,3 +107,11 @@ To test rate limiting:
 2. Verify 429 status code is returned after exceeding limit
 3. Wait for the time window to expire
 4. Verify requests are accepted again
+
+## Future Improvements
+
+For production deployments with multiple instances:
+1. Migrate per-endpoint rate limiting to use Redis
+2. Consider using a library like `@nestjs/throttler` with Redis support
+3. Add monitoring and alerting for rate limit violations
+4. Implement different rate limits based on user authentication/authorization levels

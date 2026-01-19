@@ -4,6 +4,8 @@ import {
   ExecutionContext,
   HttpException,
   HttpStatus,
+  OnModuleInit,
+  OnModuleDestroy,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { FastifyRequest } from 'fastify';
@@ -14,11 +16,39 @@ interface RateLimitStore {
   resetTime: number;
 }
 
+/**
+ * RateLimitGuard - Enforces per-endpoint rate limiting
+ *
+ * WARNING: This implementation uses in-memory storage for rate limit tracking.
+ * For production multi-instance deployments, consider using Redis or another
+ * distributed cache to ensure consistent rate limiting across instances.
+ *
+ * The in-memory store is cleaned up periodically to prevent memory leaks.
+ */
 @Injectable()
-export class RateLimitGuard implements CanActivate {
+export class RateLimitGuard
+  implements CanActivate, OnModuleInit, OnModuleDestroy
+{
   private store = new Map<string, RateLimitStore>();
+  private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor(private reflector: Reflector) {}
+
+  onModuleInit() {
+    // Clean up expired entries every 5 minutes to prevent memory leaks
+    this.cleanupInterval = setInterval(
+      () => {
+        this.cleanupExpiredEntries();
+      },
+      5 * 60 * 1000,
+    );
+  }
+
+  onModuleDestroy() {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+    }
+  }
 
   canActivate(context: ExecutionContext): boolean {
     const rateLimitOptions = this.reflector.get<RateLimitOptions>(
@@ -62,6 +92,24 @@ export class RateLimitGuard implements CanActivate {
 
     record.count++;
     return true;
+  }
+
+  private cleanupExpiredEntries(): void {
+    const now = Date.now();
+    let removedCount = 0;
+
+    for (const [key, record] of this.store.entries()) {
+      if (now > record.resetTime) {
+        this.store.delete(key);
+        removedCount++;
+      }
+    }
+
+    if (removedCount > 0) {
+      console.log(
+        `[RateLimitGuard] Cleaned up ${removedCount} expired entries`,
+      );
+    }
   }
 
   private generateKey(request: FastifyRequest): string {
