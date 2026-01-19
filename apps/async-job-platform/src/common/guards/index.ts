@@ -1,2 +1,1 @@
-// Auth guards
-// Example: export * from './auth.guard';
+export * from './csrf-for-auth.guard';

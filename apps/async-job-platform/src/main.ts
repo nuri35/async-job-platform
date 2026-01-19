@@ -9,7 +9,6 @@ import helmet from '@fastify/helmet';
 import fastifyCors from '@fastify/cors';
 import fastifyCompress from '@fastify/compress';
 import fastifyCookie from '@fastify/cookie';
-import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyCsrf from '@fastify/csrf-protection';
 import { AppModule } from './app.module';
 
