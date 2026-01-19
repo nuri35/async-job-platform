@@ -1,2 +1,2 @@
 // Custom decorators
-// Example: export * from './user.decorator';
+export * from './rate-limit.decorator';

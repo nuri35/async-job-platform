@@ -10,6 +10,7 @@ import fastifyCors from '@fastify/cors';
 import fastifyCompress from '@fastify/compress';
 import fastifyCookie from '@fastify/cookie';
 import fastifyCsrf from '@fastify/csrf-protection';
+import fastifyRateLimit from '@fastify/rate-limit';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -104,25 +105,33 @@ async function bootstrap() {
     },
   });
 
-  // Rate Limiting
-  // todo zaten bakacagız buna ayrıca hem global hem yaptıklarımız bazında
-  // await app.register(fastifyRateLimit, {
-  //   max: 100,
-  //   timeWindow: '15 minutes',
-  //   skipOnError: true,
-  //   keyGenerator: (request) => {
-  //     return (
-  //       request.headers['x-forwarded-for']?.toString() ||
-  //       request.ip ||
-  //       'unknown'
-  //     );
-  //   },
-  //   errorResponseBuilder: () => ({
-  //     statusCode: 429,
-  //     error: 'Too Many Requests',
-  //     message: 'Rate limit exceeded. Please try again later.',
-  //   }),
-  // });
+  // Rate Limiting - Global and Per-Endpoint
+  await app.register(fastifyRateLimit, {
+    global: true,
+    max: parseInt(process.env.RATE_LIMIT_MAX || '100', 10),
+    timeWindow: process.env.RATE_LIMIT_WINDOW || '15 minutes',
+    skipOnError: true,
+    keyGenerator: (request) => {
+      return (
+        request.headers['x-forwarded-for']?.toString() ||
+        request.ip ||
+        'unknown'
+      );
+    },
+    errorResponseBuilder: () => ({
+      statusCode: 429,
+      error: 'Too Many Requests',
+      message: 'Rate limit exceeded. Please try again later.',
+    }),
+    onExceeding: (request) => {
+      const logger = new Logger('RateLimit');
+      logger.warn(`Rate limit approaching for IP: ${request.ip || 'unknown'}`);
+    },
+    onExceeded: (request) => {
+      const logger = new Logger('RateLimit');
+      logger.warn(`Rate limit exceeded for IP: ${request.ip || 'unknown'}`);
+    },
+  });
 
   // Global Validation Pipe
   app.useGlobalPipes(
@@ -156,7 +165,9 @@ Bu API, asenkron iş kuyruğu yönetimi için tasarlanmıştır.
 - Webhook desteği
 
 ### Rate Limiting:
-- 100 istek / 15 dakika
+- **Global:** 100 istek / 15 dakika (tüm endpoint'ler için)
+- **Job Oluşturma (POST /jobs):** 10 istek / dakika
+- **Job Retry (POST /jobs/:id/retry):** 5 istek / dakika
       `,
       )
       .setVersion('1.0')
