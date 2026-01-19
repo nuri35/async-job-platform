@@ -5,7 +5,10 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Index,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { User } from './user.entity';
 
 export enum JobStatus {
   QUEUED = 'QUEUED',
@@ -25,6 +28,14 @@ export enum JobType {
 export class Job {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @Column('uuid', { nullable: true })
+  @Index()
+  userId: string | null;
+
+  @ManyToOne(() => User, (user) => user.jobs, { onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'userId' })
+  user: User;
 
   @Column({ type: 'enum', enum: JobType })
   type: JobType;
