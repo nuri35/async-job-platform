@@ -164,7 +164,9 @@ Bu API, asenkron iş kuyruğu yönetimi için tasarlanmıştır.
 - Webhook desteği
 
 ### Rate Limiting:
-- 100 istek / 15 dakika
+- **Global:** 100 istek / 15 dakika (tüm endpoint'ler için)
+- **Job Oluşturma (POST /jobs):** 10 istek / dakika
+- **Job Retry (POST /jobs/:id/retry):** 5 istek / dakika
       `,
       )
       .setVersion('1.0')

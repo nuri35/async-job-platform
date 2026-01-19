@@ -33,8 +33,15 @@ export class JobsController {
 
   @Post()
   @RateLimit({ max: 10, timeWindow: '1 minute' })
-  @ApiOperation({ summary: 'Create a new job' })
+  @ApiOperation({
+    summary: 'Create a new job',
+    description: 'Rate limit: 10 requests per minute',
+  })
   @ApiResponse({ status: 201, description: 'Job created successfully' })
+  @ApiResponse({
+    status: 429,
+    description: 'Too Many Requests - Rate limit exceeded',
+  })
   async create(@Body() createJobDto: CreateJobDto): Promise<Job> {
     return this.jobsService.create(createJobDto);
   }
@@ -80,10 +87,17 @@ export class JobsController {
 
   @Post(':id/retry')
   @RateLimit({ max: 5, timeWindow: '1 minute' })
-  @ApiOperation({ summary: 'Retry a failed job' })
+  @ApiOperation({
+    summary: 'Retry a failed job',
+    description: 'Rate limit: 5 requests per minute',
+  })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Job queued for retry' })
   @ApiResponse({ status: 404, description: 'Job not found' })
+  @ApiResponse({
+    status: 429,
+    description: 'Too Many Requests - Rate limit exceeded',
+  })
   async retry(@Param('id', ParseUUIDPipe) id: string): Promise<Job> {
     return this.jobsService.retry(id);
   }
