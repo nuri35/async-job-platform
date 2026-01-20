@@ -32,16 +32,16 @@ export class RefreshToken {
   @Column()
   deviceName: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', length: 500, nullable: true })
   userAgent: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', length: 45, nullable: true })
   ipAddress: string | null;
 
-  @Column()
+  @Column({ type: 'timestamp' })
   expiresAt: Date;
 
-  @Column({ nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   revokedAt: Date | null;
 
   @CreateDateColumn()

@@ -20,7 +20,7 @@ export class User {
   @Index()
   email: string;
 
-  @Column({ unique: true, nullable: true })
+  @Column({ type: 'varchar', length: 20, unique: true, nullable: true })
   @Index()
   phone: string | null;
 
