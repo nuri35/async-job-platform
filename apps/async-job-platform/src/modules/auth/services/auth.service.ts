@@ -10,12 +10,13 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
-import { User } from '@app/common';
+import { User, LoginStatus, LoginFailureReason } from '@app/common';
 import { RegisterDto, LoginDto } from '../dto';
 import { IUserRepository, IRefreshTokenRepository } from '../repositories';
 import { TokenService } from './token.service';
 import { SessionService } from './session.service';
 import { PhoneService } from './phone.service';
+import { LoginHistoryService } from './login-history.service';
 import { TokensResponseDto, SessionDto } from '../dto';
 
 @Injectable()
@@ -31,6 +32,7 @@ export class AuthService {
     private readonly sessionService: SessionService,
     @Inject(forwardRef(() => PhoneService))
     private readonly phoneService: PhoneService,
+    private readonly loginHistoryService: LoginHistoryService,
   ) {
     this.maxDevices = this.configService.get<number>('MAX_DEVICES_PER_USER', 3);
   }
@@ -84,6 +86,14 @@ export class AuthService {
   ): Promise<TokensResponseDto & { refreshToken: string }> {
     const { email, deviceFingerprint } = dto;
 
+    // Helper to build device info for login history
+    const deviceInfo = {
+      ipAddress,
+      userAgent,
+      deviceFingerprint,
+      deviceName: dto.deviceName,
+    };
+
     // 1. Fingerprint-based rate limiting (general protection)
     // Prevents same device from brute-forcing different emails
     const fpRateLimitKey = `login:fp:${deviceFingerprint}`;
@@ -92,6 +102,14 @@ export class AuthService {
       15 * 60, // 15 minutes window
     );
     if (fpAttempts > 20) {
+      // Record rate limited attempt
+      await this.loginHistoryService.recordLogin({
+        userId: null, // todo neden boyle null
+        email,
+        status: LoginStatus.FAILED,
+        failureReason: LoginFailureReason.RATE_LIMITED,
+        deviceInfo,
+      });
       throw new BadRequestException(
         'Too many login attempts from this device. Please try again later.',
       );
@@ -103,6 +121,14 @@ export class AuthService {
       deviceFingerprint,
     );
     if (isDeviceBlocked) {
+      // Record device blocked attempt
+      await this.loginHistoryService.recordLogin({
+        userId: null,
+        email,
+        status: LoginStatus.FAILED,
+        failureReason: LoginFailureReason.DEVICE_BLOCKED,
+        deviceInfo,
+      });
       throw new ForbiddenException(
         'Too many failed attempts from this device. Please try again after 1 hour.',
       );
@@ -113,11 +139,27 @@ export class AuthService {
     if (!user) {
       // Increment device attempts even for non-existent user (prevent enumeration)
       await this.handleFailedLogin(email, deviceFingerprint);
+      // Record invalid credentials (user not found)
+      await this.loginHistoryService.recordLogin({
+        userId: null,
+        email,
+        status: LoginStatus.FAILED,
+        failureReason: LoginFailureReason.INVALID_CREDENTIALS,
+        deviceInfo,
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 
     // 4. Check if user is active
     if (!user.isActive) {
+      // Record account disabled attempt
+      await this.loginHistoryService.recordLogin({
+        userId: user.id,
+        email,
+        status: LoginStatus.FAILED,
+        failureReason: LoginFailureReason.ACCOUNT_DISABLED,
+        deviceInfo,
+      });
       throw new UnauthorizedException(
         'Account is disabled. Please contact support.',
       );
@@ -130,11 +172,27 @@ export class AuthService {
     );
     if (!isPasswordValid) {
       await this.handleFailedLogin(email, deviceFingerprint, user);
+      // Record invalid credentials (wrong password)
+      await this.loginHistoryService.recordLogin({
+        userId: user.id,
+        email,
+        status: LoginStatus.FAILED,
+        failureReason: LoginFailureReason.INVALID_CREDENTIALS,
+        deviceInfo,
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 
     // 6. Check phone verification (if phone exists)
     if (user.phone && !user.phoneVerified) {
+      // Record phone not verified attempt
+      await this.loginHistoryService.recordLogin({
+        userId: user.id,
+        email,
+        status: LoginStatus.FAILED,
+        failureReason: LoginFailureReason.PHONE_NOT_VERIFIED,
+        deviceInfo,
+      });
       throw new ForbiddenException('Phone number not verified');
     }
 
@@ -160,6 +218,14 @@ export class AuthService {
         user.id,
       );
       if (activeSessionsCount >= this.maxDevices) {
+        // Record max devices reached attempt
+        await this.loginHistoryService.recordLogin({
+          userId: user.id,
+          email,
+          status: LoginStatus.FAILED,
+          failureReason: LoginFailureReason.MAX_DEVICES_REACHED,
+          deviceInfo,
+        });
         throw new ForbiddenException(
           `Maximum ${this.maxDevices} devices allowed. Please logout from another device.`,
         );
@@ -199,6 +265,15 @@ export class AuthService {
       email,
       deviceFingerprint,
     );
+
+    // 12. Record successful login
+    await this.loginHistoryService.recordLogin({
+      userId: user.id,
+      email,
+      status: LoginStatus.SUCCESS,
+      sessionJti: jti,
+      deviceInfo,
+    });
 
     return {
       accessToken,
