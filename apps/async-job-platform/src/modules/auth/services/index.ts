@@ -6,3 +6,4 @@ export * from './login-stats.service';
 export * from './login-history.service';
 export * from './risk-tracking.service';
 export * from './risk-scoring.service';
+export * from './risk-monitor.service';

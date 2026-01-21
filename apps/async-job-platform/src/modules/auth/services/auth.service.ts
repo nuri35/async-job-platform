@@ -17,6 +17,7 @@ import { TokenService } from './token.service';
 import { SessionService } from './session.service';
 import { PhoneService } from './phone.service';
 import { LoginHistoryService } from './login-history.service';
+import { RiskTrackingService, AttemptStatus } from './risk-tracking.service';
 import { TokensResponseDto, SessionDto } from '../dto';
 
 @Injectable()
@@ -33,6 +34,7 @@ export class AuthService {
     @Inject(forwardRef(() => PhoneService))
     private readonly phoneService: PhoneService,
     private readonly loginHistoryService: LoginHistoryService,
+    private readonly riskTrackingService: RiskTrackingService,
   ) {
     this.maxDevices = this.configService.get<number>('MAX_DEVICES_PER_USER', 3);
   }
@@ -104,12 +106,18 @@ export class AuthService {
     if (fpAttempts > 20) {
       // Record rate limited attempt
       await this.loginHistoryService.recordLogin({
-        userId: null, // todo neden boyle null
+        userId: null,
         email,
         status: LoginStatus.FAILED,
         failureReason: LoginFailureReason.RATE_LIMITED,
         deviceInfo,
       });
+      await this.recordRiskAttempt(
+        ipAddress,
+        email,
+        deviceFingerprint,
+        AttemptStatus.FAILED,
+      );
       throw new BadRequestException(
         'Too many login attempts from this device. Please try again later.',
       );
@@ -129,6 +137,12 @@ export class AuthService {
         failureReason: LoginFailureReason.DEVICE_BLOCKED,
         deviceInfo,
       });
+      await this.recordRiskAttempt(
+        ipAddress,
+        email,
+        deviceFingerprint,
+        AttemptStatus.FAILED,
+      );
       throw new ForbiddenException(
         'Too many failed attempts from this device. Please try again after 1 hour.',
       );
@@ -147,6 +161,12 @@ export class AuthService {
         failureReason: LoginFailureReason.INVALID_CREDENTIALS,
         deviceInfo,
       });
+      await this.recordRiskAttempt(
+        ipAddress,
+        email,
+        deviceFingerprint,
+        AttemptStatus.FAILED,
+      );
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -160,6 +180,12 @@ export class AuthService {
         failureReason: LoginFailureReason.ACCOUNT_DISABLED,
         deviceInfo,
       });
+      await this.recordRiskAttempt(
+        ipAddress,
+        email,
+        deviceFingerprint,
+        AttemptStatus.FAILED,
+      );
       throw new UnauthorizedException(
         'Account is disabled. Please contact support.',
       );
@@ -180,6 +206,12 @@ export class AuthService {
         failureReason: LoginFailureReason.INVALID_CREDENTIALS,
         deviceInfo,
       });
+      await this.recordRiskAttempt(
+        ipAddress,
+        email,
+        deviceFingerprint,
+        AttemptStatus.FAILED,
+      );
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -193,6 +225,12 @@ export class AuthService {
         failureReason: LoginFailureReason.PHONE_NOT_VERIFIED,
         deviceInfo,
       });
+      await this.recordRiskAttempt(
+        ipAddress,
+        email,
+        deviceFingerprint,
+        AttemptStatus.FAILED,
+      );
       throw new ForbiddenException('Phone number not verified');
     }
 
@@ -226,6 +264,12 @@ export class AuthService {
           failureReason: LoginFailureReason.MAX_DEVICES_REACHED,
           deviceInfo,
         });
+        await this.recordRiskAttempt(
+          ipAddress,
+          email,
+          deviceFingerprint,
+          AttemptStatus.FAILED,
+        );
         throw new ForbiddenException(
           `Maximum ${this.maxDevices} devices allowed. Please logout from another device.`,
         );
@@ -274,6 +318,12 @@ export class AuthService {
       sessionJti: jti,
       deviceInfo,
     });
+    await this.recordRiskAttempt(
+      ipAddress,
+      email,
+      deviceFingerprint,
+      AttemptStatus.SUCCESS,
+    );
 
     return {
       accessToken,
@@ -465,5 +515,21 @@ export class AuthService {
     if (!isPasswordValid) return null;
 
     return user;
+  }
+
+  private async recordRiskAttempt(
+    ipAddress: string | null,
+    email: string,
+    fingerprint: string,
+    status: AttemptStatus,
+  ): Promise<void> {
+    if (!ipAddress) return;
+
+    await this.riskTrackingService.recordAttempt({
+      ip: ipAddress,
+      email,
+      fingerprint,
+      status,
+    });
   }
 }

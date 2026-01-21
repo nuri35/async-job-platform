@@ -2,11 +2,16 @@ import { Injectable } from '@nestjs/common';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
 
+export enum AttemptStatus {
+  SUCCESS = 'success',
+  FAILED = 'failed',
+}
+
 export interface LoginAttemptData {
   ip: string;
   email: string;
   fingerprint: string;
-  status: 'success' | 'failed';
+  status: AttemptStatus;
   userId?: string | null;
 }
 
@@ -44,7 +49,7 @@ export class RiskTrackingService {
     pipeline.sadd(this.ACTIVE_KEY, data.ip); // maybe for not realistic ip
 
     // 3. Bu IP'nin hedef aldığı email'leri kaydet (sadece failed için)
-    if (data.status === 'failed') {
+    if (data.status === AttemptStatus.FAILED) {
       const targetsKey = `${this.IP_TARGETS_PREFIX}${data.ip}:targets`;
       pipeline.sadd(targetsKey, data.email);
       pipeline.expire(targetsKey, this.TARGETS_TTL);
@@ -73,8 +78,8 @@ export class RiskTrackingService {
       const parts = attempt.split(':');
       // Format: "timestamp:ip:email:fingerprint:status"
       const attemptIp = parts[1];
-      const status = parts[4];
-      return attemptIp === ip && status === 'failed';
+      const status = parts[4] as AttemptStatus;
+      return attemptIp === ip && status === AttemptStatus.FAILED;
     }).length;
   }
 

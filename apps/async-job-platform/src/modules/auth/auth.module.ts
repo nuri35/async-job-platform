@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule, JwtModuleOptions } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { RedisModule } from '@nestjs-modules/ioredis';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import {
   User,
@@ -11,7 +12,11 @@ import {
   LoginHistory,
 } from '@app/common';
 import { RedisConfig } from '../../config';
-import { AuthController, LoginHistoryController } from './controllers';
+import {
+  AuthController,
+  LoginHistoryController,
+  RiskDashboardController,
+} from './controllers';
 import {
   AuthService,
   TokenService,
@@ -19,6 +24,9 @@ import {
   PhoneService,
   LoginStatsService,
   LoginHistoryService,
+  RiskTrackingService,
+  RiskScoringService,
+  RiskMonitorService,
 } from './services';
 import {
   IUserRepository,
@@ -64,8 +72,14 @@ import { JwtAuthGuard, RolesGuard } from './guards';
     RedisModule.forRootAsync({
       useClass: RedisConfig,
     }),
+
+    ScheduleModule.forRoot(),
   ],
-  controllers: [AuthController, LoginHistoryController],
+  controllers: [
+    AuthController,
+    LoginHistoryController,
+    RiskDashboardController,
+  ],
   providers: [
     // Services
     AuthService,
@@ -74,6 +88,9 @@ import { JwtAuthGuard, RolesGuard } from './guards';
     PhoneService,
     LoginStatsService,
     LoginHistoryService,
+    RiskTrackingService,
+    RiskScoringService,
+    RiskMonitorService,
 
     // Repositories
     {
