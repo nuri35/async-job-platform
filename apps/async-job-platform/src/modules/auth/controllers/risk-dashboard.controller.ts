@@ -22,10 +22,13 @@ export class RiskDashboardController {
   // ============ SUMMARY ============
 
   @Get('summary')
-  @ApiOperation({ summary: '[Admin] Get comprehensive risk monitoring summary' })
+  @ApiOperation({
+    summary: '[Admin] Get comprehensive risk monitoring summary',
+  })
   @ApiResponse({
     status: 200,
-    description: 'Risk summary with counts by level for IP, Fingerprint, and Email',
+    description:
+      'Risk summary with counts by level for IP, Fingerprint, and Email',
     schema: {
       example: {
         ip: {
@@ -104,11 +107,13 @@ export class RiskDashboardController {
 
   @Get('fingerprints')
   @ApiOperation({
-    summary: '[Admin] Get all active fingerprint risks (VPN rotation detection)',
+    summary:
+      '[Admin] Get all active fingerprint risks (VPN rotation detection)',
   })
   @ApiResponse({
     status: 200,
-    description: 'List of active fingerprint risks sorted by score (highest first)',
+    description:
+      'List of active fingerprint risks sorted by score (highest first)',
     schema: {
       example: [
         {
@@ -137,7 +142,9 @@ export class RiskDashboardController {
   }
 
   @Get('fingerprint')
-  @ApiOperation({ summary: '[Admin] Get risk details for specific fingerprint' })
+  @ApiOperation({
+    summary: '[Admin] Get risk details for specific fingerprint',
+  })
   @ApiQuery({
     name: 'fp',
     required: true,
@@ -161,8 +168,7 @@ export class RiskDashboardController {
   })
   @ApiResponse({
     status: 200,
-    description:
-      'List of emails under attack sorted by score (highest first)',
+    description: 'List of emails under attack sorted by score (highest first)',
     schema: {
       example: [
         {
