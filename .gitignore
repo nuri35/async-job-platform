@@ -57,4 +57,10 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # Claude temp files
 tmpclaude-*
-.claude/
+
+# Claude Code - ignore local settings but keep CLAUDE.md and skills
+.claude/settings.local.json
+.claude/plans/
+
+# Skills CLI - downloaded skills (can be re-downloaded)
+.agents/

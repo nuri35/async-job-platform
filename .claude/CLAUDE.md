@@ -159,7 +159,9 @@ async-job-platform/
 │       └── src/
 │           ├── entities/
 │           └── repositories/
-└── CLAUDE.md
+└── .claude/
+    ├── CLAUDE.md
+    └── skills/
 ```
 
 ---
