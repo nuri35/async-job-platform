@@ -1,4 +1,5 @@
 ---
+name: add-endpoint
 description: Create a new REST endpoint with controller, DTO, service method, and Swagger docs
 ---
 

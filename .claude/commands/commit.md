@@ -1,4 +1,5 @@
 ---
+name: commit
 description: Git commit and push with conventional commit format
 ---
 
