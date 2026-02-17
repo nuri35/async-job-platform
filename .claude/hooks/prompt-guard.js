@@ -125,36 +125,10 @@ const WARNING_PATTERNS = [
 // ─── Subagent Routing (keyword detection → subagent delegation) ─
 const SUBAGENT_ROUTES = [
   {
-    // Complex feature requests → prompt-engineer enriches before coding
-    keywords: [
-      /\b(module|feature|endpoint|api|crud|service)\b/i,
-      /\b(implement|create|build|add|design)\b/i,
-    ],
-    minKeywordMatches: 2,
-    minPromptLength: 30,
-    subagent: 'prompt-engineer',
-    instruction: [
-      'Before implementing this request, delegate to the **prompt-engineer** subagent to enrich the prompt.',
-      '',
-      'The subagent should:',
-      "1. Identify ambiguous or missing details in the user's prompt",
-      '2. Suggest NestJS module structure (new module or existing?)',
-      '3. List required files (Controller, Service, DTO, Entity, Module)',
-      '4. Identify edge cases and error scenarios',
-      '5. Add security and validation requirements',
-      '6. Suggest performance and scalability considerations',
-      '',
-      'Stack context for the subagent:',
-      '- Backend: NestJS + TypeScript (monorepo)',
-      '- ORM: Prisma + PostgreSQL',
-      '- Queue: BullMQ + Redis + RabbitMQ',
-      '- Patterns: Repository, DTOs with class-validator, Guards, Interceptors',
-      '- Principles: SOLID, Clean Code, Early Returns',
-      '',
-      "After receiving the subagent's analysis:",
-      '- If architecture decisions are needed, ASK the user first',
-      '- Then write production-ready code based on the enriched prompt',
-    ].join('\n'),
+    name: 'prompt-engineer',
+    keywords: ['module', 'feature', 'service', 'create', 'implement', 'build'],
+    minLength: 30,
+    instruction: `MANDATORY: You MUST use the Task tool to delegate this to the "voltagent-data-ai:prompt-engineer" subagent. Do NOT do this yourself. Call it via Task tool with the user's prompt. If the Task tool call fails, then and only then, follow these steps yourself: 1) Analyze the codebase 2) Ask architecture questions 3) Plan before coding.`,
   },
   {
     // Debug/error requests → structured debugging approach
