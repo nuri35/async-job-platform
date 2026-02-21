@@ -1,0 +1,170 @@
+{
+  "$comment": "Damage Control - Security Patterns Configuration",
+  "$doc": "Single source of truth for all hook rules. Exit codes: 0=allow, 2=block, JSON=ask",
+
+  "bashToolPatterns": {
+    "block": [
+      {
+        "pattern": "\\brm\\s+-[rRf]",
+        "reason": "rm with recursive or force flags"
+      },
+      {
+        "pattern": "\\brm\\s+.*\\s+-[rRf]",
+        "reason": "rm with recursive or force flags (flags after path)"
+      },
+      {
+        "pattern": "\\brmdir\\s+",
+        "reason": "rmdir command"
+      },
+      {
+        "pattern": "\\bmkfs\\b",
+        "reason": "filesystem format command"
+      },
+      {
+        "pattern": "\\bdd\\s+",
+        "reason": "dd disk write command"
+      },
+      {
+        "pattern": ":\\(\\)\\{\\s*:\\|:\\s*&\\s*\\}\\s*;\\s*:",
+        "reason": "fork bomb"
+      },
+      {
+        "pattern": ">\\s*/dev/sd[a-z]",
+        "reason": "direct write to disk device"
+      },
+      {
+        "pattern": "\\bchmod\\s+(-R\\s+)?[0-7]{3,4}",
+        "reason": "chmod with octal permissions"
+      },
+      {
+        "pattern": "\\bchmod\\s+.*\\+[sx]",
+        "reason": "chmod adding setuid/execute"
+      },
+      {
+        "pattern": "\\bchown\\s+-R",
+        "reason": "recursive chown"
+      },
+      {
+        "pattern": "\\bcurl\\s+.*\\|\\s*(ba)?sh",
+        "reason": "curl pipe to shell execution"
+      },
+      {
+        "pattern": "\\bwget\\s+.*\\|\\s*(ba)?sh",
+        "reason": "wget pipe to shell execution"
+      },
+      {
+        "pattern": "\\beval\\s+",
+        "reason": "eval command execution"
+      },
+      {
+        "pattern": "\\b(DROP|TRUNCATE)\\s+(TABLE|DATABASE|SCHEMA)\\b",
+        "reason": "destructive SQL (DROP/TRUNCATE)"
+      },
+      {
+        "pattern": "\\bDELETE\\s+FROM\\s+\\w+\\s*;",
+        "reason": "DELETE without WHERE clause"
+      },
+      {
+        "pattern": "\\bkill\\s+-9",
+        "reason": "force kill process"
+      },
+      {
+        "pattern": "\\bpkill\\s+-9",
+        "reason": "force kill processes by name"
+      },
+      {
+        "pattern": "\\bshutdown\\b",
+        "reason": "system shutdown command"
+      },
+      {
+        "pattern": "\\breboot\\b",
+        "reason": "system reboot command"
+      },
+      {
+        "pattern": "\\bnpm\\s+publish\\b",
+        "reason": "npm publish (accidental package publish)"
+      },
+      {
+        "pattern": "\\bgit\\s+push\\s+.*--force\\b",
+        "reason": "git force push"
+      },
+      {
+        "pattern": "\\bgit\\s+push\\s+-f\\b",
+        "reason": "git force push (short flag)"
+      },
+      {
+        "pattern": "\\bgit\\s+reset\\s+--hard",
+        "reason": "git hard reset"
+      },
+      {
+        "pattern": "\\bgit\\s+clean\\s+-[dfx]",
+        "reason": "git clean (removes untracked files)"
+      }
+    ],
+
+    "ask": [
+      {
+        "pattern": "\\bDELETE\\s+FROM\\s+\\w+\\s+WHERE\\b",
+        "reason": "SQL DELETE with WHERE clause"
+      },
+      {
+        "pattern": "\\bgit\\s+checkout\\s+--\\s*\\.",
+        "reason": "git discard all changes"
+      },
+      {
+        "pattern": "\\bgit\\s+stash\\s+drop",
+        "reason": "git stash drop"
+      },
+      {
+        "pattern": "\\bgit\\s+branch\\s+-[dD]",
+        "reason": "git delete branch"
+      },
+      {
+        "pattern": "\\bdocker\\s+(rm|rmi|system\\s+prune)",
+        "reason": "docker remove/prune"
+      },
+      {
+        "pattern": "\\bnpm\\s+uninstall\\b",
+        "reason": "npm uninstall package"
+      }
+    ]
+  },
+
+  "zeroAccessPaths": [
+    "~/.ssh/",
+    "~/.aws/",
+    "~/.gnupg/",
+    "~/.config/gcloud/",
+    "~/.docker/config.json",
+    "**/.env",
+    "**/.env.local",
+    "**/.env.production",
+    "**/secrets/",
+    "**/credentials/"
+  ],
+
+  "readOnlyPaths": [
+    "/etc/",
+    "~/.bashrc",
+    "~/.zshrc",
+    "~/.profile",
+    "~/.gitconfig",
+    "**/package-lock.json",
+    "**/yarn.lock",
+    "**/pnpm-lock.yaml",
+    "**/node_modules/",
+    "**/dist/",
+    "**/build/"
+  ],
+
+  "noDeletePaths": [
+    ".claude/",
+    ".git/",
+    "LICENSE",
+    "README.md",
+    "docker-compose.yml",
+    "nest-cli.json",
+    "tsconfig.json",
+    "package.json"
+  ]
+}

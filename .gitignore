@@ -65,3 +65,4 @@ tmpclaude-*
 # Skills CLI - downloaded skills (can be re-downloaded)
 .agents/
 logs/claude/
+.claude/hooks/damage-control/logs/
