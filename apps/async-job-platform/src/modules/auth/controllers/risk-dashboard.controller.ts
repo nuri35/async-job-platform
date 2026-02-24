@@ -52,6 +52,11 @@ export class RiskDashboardController {
       },
     },
   })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid token',
+  })
+  @ApiResponse({ status: 403, description: 'Forbidden — admin role required' })
   async getSummary() {
     return this.riskMonitorService.getSummary();
   }
@@ -83,6 +88,11 @@ export class RiskDashboardController {
       ],
     },
   })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid token',
+  })
+  @ApiResponse({ status: 403, description: 'Forbidden — admin role required' })
   async getActiveIpRisks() {
     return this.riskMonitorService.getAllActiveIpRisks();
   }
@@ -99,6 +109,11 @@ export class RiskDashboardController {
     status: 200,
     description: 'Risk details for the specified IP',
   })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid token',
+  })
+  @ApiResponse({ status: 403, description: 'Forbidden — admin role required' })
   async getRiskByIp(@Query('ip') ip: string) {
     return this.riskMonitorService.getRiskByIp(ip);
   }
@@ -137,6 +152,11 @@ export class RiskDashboardController {
       ],
     },
   })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid token',
+  })
+  @ApiResponse({ status: 403, description: 'Forbidden — admin role required' })
   async getActiveFingerprintRisks() {
     return this.riskMonitorService.getAllActiveFingerprintRisks();
   }
@@ -156,6 +176,11 @@ export class RiskDashboardController {
     status: 200,
     description: 'Risk details for the specified fingerprint',
   })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid token',
+  })
+  @ApiResponse({ status: 403, description: 'Forbidden — admin role required' })
   async getRiskByFingerprint(@Query('fp') fingerprint: string) {
     return this.riskMonitorService.getRiskByFingerprint(fingerprint);
   }
@@ -192,6 +217,11 @@ export class RiskDashboardController {
       ],
     },
   })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid token',
+  })
+  @ApiResponse({ status: 403, description: 'Forbidden — admin role required' })
   async getActiveEmailRisks() {
     return this.riskMonitorService.getAllActiveEmailRisks();
   }
@@ -209,6 +239,11 @@ export class RiskDashboardController {
     status: 200,
     description: 'Risk details for the specified email',
   })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid token',
+  })
+  @ApiResponse({ status: 403, description: 'Forbidden — admin role required' })
   async getRiskByEmail(@Query('email') email: string) {
     return this.riskMonitorService.getRiskByEmail(email);
   }
