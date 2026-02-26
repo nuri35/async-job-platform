@@ -5,12 +5,14 @@ import {
   MinLength,
   MaxLength,
   Matches,
-  IsOptional,
+  IsNotEmpty,
 } from 'class-validator';
+import { IsNotDisposableEmail } from '../../../common/validators';
 
 export class RegisterDto {
   @ApiProperty({ example: 'user@example.com' })
   @IsEmail()
+  @IsNotDisposableEmail()
   email: string;
 
   @ApiProperty({ example: 'Password123' })
@@ -23,11 +25,11 @@ export class RegisterDto {
   })
   password: string;
 
-  @ApiProperty({ example: '+905551234567', required: false })
-  @IsOptional()
+  @ApiProperty({ example: '+905551234567' })
+  @IsNotEmpty({ message: 'Phone number is required' })
   @IsString()
   @Matches(/^\+[1-9]\d{10,14}$/, {
     message: 'Phone must be in international format (e.g., +905551234567)',
   })
-  phone?: string;
+  phone: string;
 }

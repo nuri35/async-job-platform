@@ -1,0 +1,6 @@
+{
+  "jest.jestCommandLine": "npx jest --config jest.config.ts",
+  "jest.autoRun": "off",
+  "bun.runtime": false,
+  "bun.debugRuntime.enabled": false
+}

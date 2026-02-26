@@ -1,7 +1,6 @@
 import {
   Injectable,
   UnauthorizedException,
-  ConflictException,
   BadRequestException,
   ForbiddenException,
   Logger,
@@ -39,19 +38,23 @@ export class AuthService {
     this.maxDevices = this.configService.get<number>('MAX_DEVICES_PER_USER', 3);
   }
 
-  async register(dto: RegisterDto): Promise<User> {
-    // Check if email exists
-    const existingUser = await this.userRepository.findByEmail(dto.email);
-    if (existingUser) {
-      throw new ConflictException('Email already registered');
+  async register(dto: RegisterDto): Promise<User | null> {
+    // Check if email or phone already exists
+    // Return null silently to prevent user enumeration
+    const existingEmail = await this.userRepository.findByEmail(dto.email);
+    if (existingEmail) {
+      this.logger.debug(
+        `Registration attempt with existing email: ${dto.email}`,
+      );
+      return null;
     }
 
-    // Check if phone exists
-    if (dto.phone) {
-      const existingPhone = await this.userRepository.findByPhone(dto.phone);
-      if (existingPhone) {
-        throw new ConflictException('Phone number already registered');
-      }
+    const existingPhone = await this.userRepository.findByPhone(dto.phone);
+    if (existingPhone) {
+      this.logger.debug(
+        `Registration attempt with existing phone: ${dto.phone}`,
+      );
+      return null;
     }
 
     // Hash password
@@ -61,22 +64,19 @@ export class AuthService {
     const user = this.userRepository.create({
       email: dto.email,
       passwordHash,
-      phone: dto.phone || null,
-      phoneVerified: dto.phone ? false : true, // No phone = no verification needed
+      phone: dto.phone,
+      phoneVerified: false,
     });
 
     const savedUser = await this.userRepository.save(user);
 
-    // Send verification SMS if phone provided
-    if (dto.phone) {
-      try {
-        await this.phoneService.sendVerificationCode(dto.phone);
-      } catch (error) {
-        // Log but don't fail registration - user can resend later
-        this.logger.warn(
-          `Failed to send verification SMS to ${dto.phone}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        );
-      }
+    // Send verification SMS
+    try {
+      await this.phoneService.sendVerificationCode(dto.phone);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to send verification SMS to ${dto.phone}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
 
     return savedUser;
@@ -216,7 +216,7 @@ export class AuthService {
     }
 
     // 6. Check phone verification (if phone exists)
-    if (user.phone && !user.phoneVerified) {
+    if (!user.phoneVerified) {
       // Record phone not verified attempt
       await this.loginHistoryService.recordLogin({
         userId: user.id,

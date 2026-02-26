@@ -60,21 +60,19 @@ export class AuthController {
   @ApiResponse({
     status: 201,
     description:
-      'User registered successfully. If phone provided, verification code sent via SMS.',
+      'If the provided credentials are valid, a verification code will be sent via SMS.',
   })
   @ApiResponse({
     status: 400,
     description: 'Validation error — invalid input data',
   })
-  @ApiResponse({ status: 409, description: 'Email or phone already exists' })
   async register(@Body() dto: RegisterDto) {
-    const user = await this.authService.register(dto);
+    await this.authService.register(dto);
+
+    // Always return the same response to prevent email/phone enumeration
     return {
-      id: user.id,
-      email: user.email,
-      phone: user.phone,
-      phoneVerified: user.phoneVerified,
-      createdAt: user.createdAt,
+      message:
+        'If your email and phone are not already registered, a verification SMS has been sent.',
     };
   }
 
