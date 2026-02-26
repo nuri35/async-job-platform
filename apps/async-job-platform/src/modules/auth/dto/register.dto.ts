@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsEmail,
   IsString,
@@ -11,6 +12,9 @@ import { IsNotDisposableEmail } from '../../../common/validators';
 
 export class RegisterDto {
   @ApiProperty({ example: 'user@example.com' })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
   @IsEmail()
   @IsNotDisposableEmail()
   email: string;
