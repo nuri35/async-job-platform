@@ -1,123 +1,151 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Bu dosya Claude Code'un bu repository'de nasıl çalışacağını belirler.
 
-## Commands
+## Claude Code Rules
+
+- Do NOT read files outside the target module unless explicitly told
+- Do NOT run `find`, `tree`, or `ls` on root directory
+- Do NOT cat entire files — read only relevant sections
+- Do NOT run all tests — only run tests for the target module
+- Fail output'larında sadece error summary göster, full stack trace basma
+- Implementasyon öncesi ilgili plan dosyasını oku, tüm plan dosyalarını değil
+- Başka dosyaya bakma denmişse sadece verilen dosyalarla çalış
+
+## Proje Amacı
+
+**Async Job Platform** — kullanıcılar API üzerinden uzun süren job'lar submit eder (rapor üretimi, CSV import, webhook), RabbitMQ ile kuyruğa alınır, worker'lar tarafından arka planda işlenir.
+
+**Auth** bu platformun kapısıdır — JWT tabanlı oturum yönetimi, API key ile dış servis erişimi ve opsiyonel 2FA.
+
+> Auth modülü aktif olarak sadeleştiriliyor. Detaylı plan: `docs/plans/auth/`
+
+## Komutlar
 
 ```bash
-# Development
-npm run start:dev          # Start API in watch mode
-npm run start:worker:dev   # Start Worker in watch mode
-
-# Build
-npm run build              # Build API
-npm run build:worker       # Build Worker
-
-# Quality
+npm run start:dev          # API (port 3000) — watch mode
+npm run start:worker:dev   # Worker (port 3001) — watch mode
+npm run build              # API build (TypeScript doğrulama)
+npm run build:worker       # Worker build
 npm run lint               # ESLint with auto-fix
 npm run format             # Prettier formatting
-
-# Docker (Infrastructure)
-docker-compose up -d                    # Start all services (PostgreSQL, Redis, RabbitMQ)
-docker-compose up -d postgres redis     # Start only DB services
-docker-compose logs -f api              # Follow API logs
+docker-compose up -d       # Tüm servisler (PostgreSQL, Redis, RabbitMQ)
 ```
 
-## Project Architecture
+## Tech Stack
 
-**NestJS monorepo** with async job processing and security monitoring.
+NestJS + Fastify, TypeScript (strict), PostgreSQL 16 (TypeORM), Redis 7 (ioredis), RabbitMQ 3 (amqplib), JWT (access + refresh), class-validator, Swagger, Helmet, CORS, CSRF (double submit cookie), rate limiting.
 
-### Tech Stack
-- **Framework:** NestJS + Fastify
-- **Language:** TypeScript
-- **Database:** PostgreSQL (TypeORM)
-- **Cache/Sessions:** Redis (ioredis)
-- **Message Queue:** RabbitMQ (amqplib)
-- **Auth:** JWT (access + refresh tokens)
-- **API Docs:** Swagger
-
-### Monorepo Structure
+## Monorepo Yapısı
 
 ```
 apps/
-├── async-job-platform/    # Main API (port 3000)
-│   └── src/modules/auth/  # Auth & security monitoring
-└── worker/                # Background job processor (port 3001)
-
+├── async-job-platform/        # Ana API (port 3000)
+│   └── src/
+│       ├── main.ts            # Fastify bootstrap, Swagger, CORS, Helmet
+│       ├── app.module.ts      # Root module (global JwtAuthGuard)
+│       ├── config/            # Database + Redis config factories
+│       ├── common/            # App-level guards, decorators, validators
+│       └── modules/
+│           ├── auth/          # Kimlik doğrulama modülü
+│           └── jobs/          # Job yönetim modülü
+│
+├── worker/                    # Arka plan job işleyici (port 3001)
+│
 libs/
-└── common/                # Shared entities, repositories, utils
+└── common/                    # Paylaşılan kod (API + Worker)
+    └── src/
+        ├── entities/          # User, Job, RefreshToken, ApiKey
+        ├── enums/             # Role, JobStatus, JobType
+        ├── interfaces/        # JwtPayload, JwtRefreshPayload
+        └── repositories/      # BaseRepository (generic CRUD)
 ```
 
-### Key Directories
-- `apps/async-job-platform/src/modules/auth/` → Auth module with risk monitoring
-- `libs/common/src/entities/` → TypeORM entities (shared)
-- `libs/common/src/repositories/` → Data access layer
+### Path Alias
 
-## Auth Module
+- `@app/common` → `libs/common/src`
 
-### Services
-| Service | Purpose |
-|---------|---------|
-| `AuthService` | Login, register, token management |
-| `SessionService` | Redis session management, rate limiting |
-| `TokenService` | JWT generation/validation |
-| `LoginHistoryService` | PostgreSQL login audit trail |
-| `LoginStatsService` | Redis real-time stats (HyperLogLog) |
-| `RiskTrackingService` | Redis attack tracking (IP, FP, Email) |
-| `RiskScoringService` | Risk score calculation (0-100) |
-| `RiskMonitorService` | CronJob (30s) monitoring and alerts |
+## Auth Modülü (Özet)
 
-### Controllers
-- `AuthController` → /auth/*
-- `LoginHistoryController` → /login-history/*
-- `RiskDashboardController` → /risk-dashboard/* (Admin)
+```
+modules/auth/
+├── controllers/    # AuthController → /auth/*
+├── services/       # AuthService, TokenService, SessionService
+├── guards/         # JwtAuthGuard, RolesGuard
+├── strategies/     # JwtStrategy, LocalStrategy (Passport)
+├── decorators/     # @Public(), @CurrentUser(), @Roles()
+├── repositories/   # UserRepository, RefreshTokenRepository
+└── dto/            # RegisterDto, LoginDto, TokensResponseDto
+```
 
-## Security & Risk Monitoring
+- Tüm route'lar default JWT korumalı (`APP_GUARD`), public yapmak için `@Public()`
+- Refresh token → HttpOnly cookie, access token → response body
+- Redis key pattern'leri: `session:{userId}:{jti}`, `blacklist:jwt:{jti}`, `ratelimit:*`
+- Endpoint detayları ve auth flow için: `docs/plans/auth/00-auth-overview.md`
 
-### Rate Limiting
-- Device fingerprint: 20 attempts / 15 min
-- Per email-device: 5 failed = 1 hour block
-- 3 blocks = account deactivation
+## Jobs Modülü (Özet)
 
-### 3-Dimensional Risk Tracking (Redis)
+```
+modules/jobs/
+├── jobs.controller.ts     # /jobs/* endpoints
+├── jobs.service.ts        # CRUD, retry, stats, queue management
+├── repositories/          # JobsRepository
+└── dto/                   # CreateJobDto, UpdateJobDto
+```
 
-| Dimension | Keys | Purpose |
-|-----------|------|---------|
-| IP | `risk:attempts`, `risk:active`, `risk:ip:{ip}:targets` | Track attacker IPs |
-| Fingerprint | `risk:fp:active`, `risk:fp:{fp}:ips`, `risk:fp:{fp}:targets` | VPN detection |
-| Email | `risk:email:active`, `risk:email:{email}:ips` | Victim protection |
+- Job lifecycle: QUEUED → PROCESSING → SUCCESS/FAILED → RETRYING
+- Entity detayları: `libs/common/src/entities/job.entity.ts`
+- Worker henüz minimal — RabbitMQ consumer implementasyonu gelecek
 
-### Attack Detection
-- **BRUTE_FORCE:** 1 IP → 1 Email (many attempts)
-- **CREDENTIAL_STUFFING:** 1 IP → Many Emails
-- **VPN_ROTATION:** 1 Fingerprint → Many IPs
-- **DISTRIBUTED_ATTACK:** Many IPs → 1 Email
+## NestJS Conventions
 
-### Risk Scoring (0-100)
-- Levels: LOW (<25), MEDIUM (25-49), HIGH (≥50)
-- Redis keys have 1-hour TTL
+- **Business logic → Service**, asla Controller'da
+- **DTOs** + `class-validator` — tüm input'lar validate edilmeli
+- **Repository pattern** — abstract interface + TypeORM implementasyonu
+- **Guards** — auth, rate limiting, CSRF
+- **Decorators** — `@Public()`, `@CurrentUser()`, `@Roles()`, `@RateLimit()`
+- **Barrel exports** — her klasörde `index.ts`
+- Entity'ler: UUID PK, snake_case tablo, `@CreateDateColumn()` / `@UpdateDateColumn()`
 
-## Conventions
+### Dosya Organizasyonu
 
-### NestJS Patterns
-- Business logic in Services, never in Controllers
-- DTOs with class-validator for all inputs
-- Repository pattern for database operations
-- Guards for auth, Interceptors for response transformation
-- `@Cron()` with `isRunning` flag to prevent overlap
+```
+module/
+├── module-name.module.ts
+├── controllers/*.controller.ts
+├── services/*.service.ts
+├── repositories/*.repository.interface.ts + *.repository.ts
+├── guards/*.guard.ts
+├── dto/*.dto.ts
+└── index.ts
+```
 
 ### Git Commits
-- Format: `feat(module):`, `fix(module):`, `style(module):`
-- Atomic, focused changes
+
+`feat(module):`, `fix(module):`, `refactor(module):`, `docs(module):` — atomic, focused.
 
 ### Communication
-- Turkish explanations welcome
-- Ask architecture questions before implementing
-- For bug fixes: explain root cause first
 
-## Important Notes
+- Türkçe açıklamalar, teknik terimlerde İngilizce
+- Mimari kararlardan önce sor
+- Bug fix'lerde önce root cause açıkla
 
-1. When modifying risk tracking, update all 3 dimensions (IP, FP, Email)
-2. CronJob runs every 30 seconds - be mindful of performance
-3. LoginHistory is permanent in PostgreSQL, risk data in Redis (1h TTL)
-4. Always run `npm run build` to verify TypeScript compilation
+## Aktif Restructuring
+
+Plan dosyaları: `docs/plans/auth/`
+
+| Step | Dosya                          | Konu                               |
+| ---- | ------------------------------ | ---------------------------------- |
+| 0    | `00-auth-overview.md`          | Genel bakış                        |
+| 1    | `01-auth-cleanup.md`           | Gereksiz dosyaları sil             |
+| 2    | `02-auth-simplify.md`          | DTO/service sadeleştirme           |
+| 3    | `03-register-rate-limiting.md` | IP tabanlı Redis rate limit        |
+| 4    | `04-api-keys.md`               | API key sistemi                    |
+| 5    | `05-totp-2fa.md`               | TOTP 2FA                          |
+
+> Implementasyon öncesi ilgili plan dosyasını oku.
+
+## Önemli Notlar
+
+1. `npm run build` — her değişiklik sonrası TypeScript doğrulama yap
+2. `jobtesss.controller.ts` experimental — production'da kaldırılacak
