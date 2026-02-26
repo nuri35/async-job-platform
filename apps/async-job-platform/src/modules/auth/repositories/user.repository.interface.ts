@@ -6,13 +6,8 @@ export abstract class IUserRepository {
   abstract save(entity: User): Promise<User>;
   abstract findById(id: string): Promise<User | null>;
   abstract findByEmail(email: string): Promise<User | null>;
-  abstract findByPhone(phone: string): Promise<User | null>;
   abstract findOne(where: FindOptionsWhere<User>): Promise<User | null>;
   abstract update(id: string, data: DeepPartial<User>): Promise<User | null>;
-  abstract updatePhoneVerified(
-    userId: string,
-    verified: boolean,
-  ): Promise<void>;
   abstract deactivate(userId: string): Promise<void>;
   abstract activate(userId: string): Promise<void>;
 }

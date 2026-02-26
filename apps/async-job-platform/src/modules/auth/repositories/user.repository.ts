@@ -27,10 +27,6 @@ export class UserRepository implements IUserRepository {
     return this.repository.findOne({ where: { email } });
   }
 
-  async findByPhone(phone: string): Promise<User | null> {
-    return this.repository.findOne({ where: { phone } });
-  }
-
   async findOne(where: FindOptionsWhere<User>): Promise<User | null> {
     return this.repository.findOne({ where });
   }
@@ -40,10 +36,6 @@ export class UserRepository implements IUserRepository {
     if (!user) return null;
     Object.assign(user, data);
     return this.save(user);
-  }
-
-  async updatePhoneVerified(userId: string, verified: boolean): Promise<void> {
-    await this.repository.update(userId, { phoneVerified: verified });
   }
 
   async deactivate(userId: string): Promise<void> {

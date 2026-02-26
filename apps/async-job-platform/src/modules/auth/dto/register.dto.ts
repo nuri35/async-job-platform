@@ -6,7 +6,6 @@ import {
   MinLength,
   MaxLength,
   Matches,
-  IsNotEmpty,
 } from 'class-validator';
 import { IsNotDisposableEmail } from '../../../common/validators';
 
@@ -28,12 +27,4 @@ export class RegisterDto {
       'Password must contain at least one uppercase letter, one lowercase letter, and one number',
   })
   password: string;
-
-  @ApiProperty({ example: '+905551234567' })
-  @IsNotEmpty({ message: 'Phone number is required' })
-  @IsString()
-  @Matches(/^\+[1-9]\d{10,14}$/, {
-    message: 'Phone must be in international format (e.g., +905551234567)',
-  })
-  phone: string;
 }

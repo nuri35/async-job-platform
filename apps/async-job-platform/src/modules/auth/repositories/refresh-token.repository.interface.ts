@@ -10,9 +10,5 @@ export abstract class IRefreshTokenRepository {
   abstract countActiveByUserId(userId: string): Promise<number>;
   abstract revokeById(id: string): Promise<void>;
   abstract revokeAllByUserId(userId: string): Promise<void>;
-  abstract revokeByDeviceFingerprint(
-    userId: string,
-    deviceFingerprint: string,
-  ): Promise<void>;
   abstract deleteExpired(): Promise<void>;
 }

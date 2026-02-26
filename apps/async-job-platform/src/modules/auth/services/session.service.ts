@@ -3,8 +3,6 @@ import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
 
 interface SessionData {
-  deviceFingerprint: string;
-  deviceName: string;
   ipAddress: string | null;
   userAgent: string | null;
   createdAt: string;
@@ -16,14 +14,8 @@ export class SessionService {
   private readonly SESSION_PREFIX = 'session:';
   private readonly BLACKLIST_PREFIX = 'blacklist:jwt:';
   private readonly RATE_LIMIT_PREFIX = 'ratelimit:';
-  private readonly DEVICE_ATTEMPT_PREFIX = 'login:device:';
-  private readonly DEVICE_BLOCK_PREFIX = 'login:block:';
   private readonly SESSION_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
   private readonly ACCESS_TOKEN_TTL = 15 * 60; // 15 minutes in seconds
-  private readonly DEVICE_ATTEMPT_TTL = 60 * 60; // 1 hour in seconds
-  private readonly DEVICE_BLOCK_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
-  private readonly MAX_DEVICE_ATTEMPTS = 5;
-  private readonly MAX_BLOCKS_BEFORE_DEACTIVATION = 3;
 
   constructor(
     @InjectRedis()
@@ -154,96 +146,5 @@ export class SessionService {
 
   async resetRateLimit(key: string): Promise<void> {
     await this.redis.del(`${this.RATE_LIMIT_PREFIX}${key}`);
-  }
-
-  // Device-based Login Rate Limiting
-  private getDeviceAttemptKey(email: string, fingerprint: string): string {
-    return `${this.DEVICE_ATTEMPT_PREFIX}${email}:${fingerprint}`;
-  }
-
-  private getDeviceBlockKey(email: string, fingerprint: string): string {
-    return `${this.DEVICE_BLOCK_PREFIX}${email}:${fingerprint}`;
-  }
-
-  async getDeviceLoginAttempts(
-    email: string,
-    fingerprint: string,
-  ): Promise<number> {
-    const key = this.getDeviceAttemptKey(email, fingerprint);
-    const count = await this.redis.get(key);
-    return count ? parseInt(count, 10) : 0;
-  }
-
-  async incrementDeviceLoginAttempts(
-    email: string,
-    fingerprint: string,
-  ): Promise<number> {
-    const key = this.getDeviceAttemptKey(email, fingerprint);
-    const count = await this.redis.incr(key);
-    if (count === 1) {
-      await this.redis.expire(key, this.DEVICE_ATTEMPT_TTL);
-    }
-    return count;
-  }
-
-  async resetDeviceLoginAttempts(
-    email: string,
-    fingerprint: string,
-  ): Promise<void> {
-    const key = this.getDeviceAttemptKey(email, fingerprint);
-    await this.redis.del(key);
-  }
-
-  async getDeviceBlockCount(
-    email: string,
-    fingerprint: string,
-  ): Promise<number> {
-    const key = this.getDeviceBlockKey(email, fingerprint);
-    const count = await this.redis.get(key);
-    return count ? parseInt(count, 10) : 0;
-  }
-
-  async incrementDeviceBlockCount(
-    email: string,
-    fingerprint: string,
-  ): Promise<number> {
-    const key = this.getDeviceBlockKey(email, fingerprint);
-    const count = await this.redis.incr(key);
-    if (count === 1) {
-      await this.redis.expire(key, this.DEVICE_BLOCK_TTL);
-    }
-    return count;
-  }
-
-  async resetDeviceBlockCount(
-    email: string,
-    fingerprint: string,
-  ): Promise<void> {
-    const key = this.getDeviceBlockKey(email, fingerprint);
-    await this.redis.del(key);
-  }
-
-  async isDeviceBlocked(email: string, fingerprint: string): Promise<boolean> {
-    const attempts = await this.getDeviceLoginAttempts(email, fingerprint);
-    return attempts >= this.MAX_DEVICE_ATTEMPTS;
-  }
-
-  async shouldDeactivateAccount(
-    email: string,
-    fingerprint: string,
-  ): Promise<boolean> {
-    const blockCount = await this.getDeviceBlockCount(email, fingerprint);
-    return blockCount >= this.MAX_BLOCKS_BEFORE_DEACTIVATION;
-  }
-
-  // Check if fingerprint already has active session for user
-  async findSessionByFingerprint(
-    userId: string,
-    fingerprint: string,
-  ): Promise<{ jti: string; data: SessionData } | null> {
-    const sessions = await this.getAllSessions(userId);
-    return (
-      sessions.find((s) => s.data.deviceFingerprint === fingerprint) || null
-    );
   }
 }

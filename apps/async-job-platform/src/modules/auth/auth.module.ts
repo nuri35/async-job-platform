@@ -3,52 +3,23 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule, JwtModuleOptions } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { RedisModule } from '@nestjs-modules/ioredis';
-import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import {
-  User,
-  RefreshToken,
-  PhoneVerification,
-  LoginHistory,
-} from '@app/common';
+import { User, RefreshToken } from '@app/common';
 import { RedisConfig } from '../../config';
-import {
-  AuthController,
-  LoginHistoryController,
-  RiskDashboardController,
-} from './controllers';
-import {
-  AuthService,
-  TokenService,
-  SessionService,
-  PhoneService,
-  LoginStatsService,
-  LoginHistoryService,
-  RiskTrackingService,
-  RiskScoringService,
-  RiskMonitorService,
-} from './services';
+import { AuthController } from './controllers';
+import { AuthService, TokenService, SessionService } from './services';
 import {
   IUserRepository,
   UserRepository,
   IRefreshTokenRepository,
   RefreshTokenRepository,
-  IPhoneVerificationRepository,
-  PhoneVerificationRepository,
-  ILoginHistoryRepository,
-  LoginHistoryRepository,
 } from './repositories';
 import { JwtStrategy, LocalStrategy } from './strategies';
 import { JwtAuthGuard, RolesGuard } from './guards';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      User,
-      RefreshToken,
-      PhoneVerification,
-      LoginHistory,
-    ]),
+    TypeOrmModule.forFeature([User, RefreshToken]),
 
     PassportModule.register({ defaultStrategy: 'jwt' }),
 
@@ -72,25 +43,13 @@ import { JwtAuthGuard, RolesGuard } from './guards';
     RedisModule.forRootAsync({
       useClass: RedisConfig,
     }),
-
-    ScheduleModule.forRoot(),
   ],
-  controllers: [
-    AuthController,
-    LoginHistoryController,
-    RiskDashboardController,
-  ],
+  controllers: [AuthController],
   providers: [
     // Services
     AuthService,
     TokenService,
     SessionService,
-    PhoneService,
-    LoginStatsService,
-    LoginHistoryService,
-    RiskTrackingService,
-    RiskScoringService,
-    RiskMonitorService,
 
     // Repositories
     {
@@ -100,14 +59,6 @@ import { JwtAuthGuard, RolesGuard } from './guards';
     {
       provide: IRefreshTokenRepository,
       useClass: RefreshTokenRepository,
-    },
-    {
-      provide: IPhoneVerificationRepository,
-      useClass: PhoneVerificationRepository,
-    },
-    {
-      provide: ILoginHistoryRepository,
-      useClass: LoginHistoryRepository,
     },
 
     // Strategies

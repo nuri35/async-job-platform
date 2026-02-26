@@ -26,12 +26,6 @@ export class RefreshToken {
   @JoinColumn({ name: 'userId' })
   user: User;
 
-  @Column()
-  deviceFingerprint: string;
-
-  @Column()
-  deviceName: string;
-
   @Column({ type: 'varchar', length: 500, nullable: true })
   userAgent: string | null;
 

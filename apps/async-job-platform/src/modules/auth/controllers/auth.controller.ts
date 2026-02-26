@@ -26,15 +26,13 @@ import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'crypto';
 import type { JwtPayload } from '@app/common';
 
-import { AuthService, PhoneService } from '../services';
+import { AuthService } from '../services';
 import {
   RegisterDto,
   LoginDto,
   RefreshTokenDto,
   TokensResponseDto,
   SessionDto,
-  SendPhoneCodeDto,
-  VerifyPhoneCodeDto,
 } from '../dto';
 import { JwtAuthGuard } from '../guards';
 import { Public, CurrentUser } from '../decorators';
@@ -45,7 +43,6 @@ import { CsrfForAuthGuard } from '../../../common/guards';
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
-    private readonly phoneService: PhoneService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -53,14 +50,12 @@ export class AuthController {
   @Post('register')
   @ApiOperation({
     summary: 'Register a new user',
-    description:
-      'Creates a new user account. If phone number is provided, a verification SMS is automatically sent.',
+    description: 'Creates a new user account with email and password.',
   })
   @ApiBody({ type: RegisterDto })
   @ApiResponse({
     status: 201,
-    description:
-      'If the provided credentials are valid, a verification code will be sent via SMS.',
+    description: 'Account created successfully.',
   })
   @ApiResponse({
     status: 400,
@@ -69,10 +64,10 @@ export class AuthController {
   async register(@Body() dto: RegisterDto) {
     await this.authService.register(dto);
 
-    // Always return the same response to prevent email/phone enumeration
+    // Always return the same response to prevent email enumeration
     return {
       message:
-        'If your email and phone are not already registered, a verification SMS has been sent.',
+        'If your email is not already registered, your account has been created.',
     };
   }
 
@@ -97,7 +92,7 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   @ApiResponse({
     status: 403,
-    description: 'Phone not verified or max devices reached',
+    description: 'Account disabled',
   })
   @ApiResponse({
     status: 429,
@@ -294,46 +289,6 @@ export class AuthController {
     @Param('sessionId') sessionId: string,
   ) {
     await this.authService.revokeSession(user.sub, sessionId, user.jti);
-  }
-
-  // Phone Verification Endpoints
-  @Public()
-  @Post('phone/resend-code')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Resend phone verification code',
-    description:
-      'Use this endpoint to resend verification code if the original code expired or was not received. Code is automatically sent during registration.',
-  })
-  @ApiBody({ type: SendPhoneCodeDto })
-  @ApiResponse({ status: 200, description: 'Code sent successfully' })
-  @ApiResponse({
-    status: 400,
-    description: 'Too many requests or invalid phone',
-  })
-  @ApiResponse({
-    status: 429,
-    description: 'Too many requests — rate limit exceeded',
-  })
-  async resendPhoneCode(@Body() dto: SendPhoneCodeDto) {
-    await this.phoneService.sendVerificationCode(dto.phone);
-    return { message: 'Verification code sent' };
-  }
-
-  @Public()
-  @Post('phone/verify')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Verify phone number with code',
-    description:
-      'Verifies a phone number using the SMS code sent during registration or via resend endpoint.',
-  })
-  @ApiBody({ type: VerifyPhoneCodeDto })
-  @ApiResponse({ status: 200, description: 'Phone verified successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid or expired code' })
-  async verifyPhone(@Body() dto: VerifyPhoneCodeDto) {
-    await this.phoneService.verifyCode(dto.phone, dto.code);
-    return { message: 'Phone number verified successfully' };
   }
 
   // CSRF Token endpoint (Double Submit Cookie Pattern)

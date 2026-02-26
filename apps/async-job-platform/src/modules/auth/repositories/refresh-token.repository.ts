@@ -56,16 +56,6 @@ export class RefreshTokenRepository implements IRefreshTokenRepository {
     );
   }
 
-  async revokeByDeviceFingerprint(
-    userId: string,
-    deviceFingerprint: string,
-  ): Promise<void> {
-    await this.repository.update(
-      { userId, deviceFingerprint, revokedAt: IsNull() },
-      { revokedAt: new Date() },
-    );
-  }
-
   async deleteExpired(): Promise<void> {
     await this.repository.delete({
       expiresAt: LessThan(new Date()),

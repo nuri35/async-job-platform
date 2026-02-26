@@ -2,57 +2,34 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
-  ForbiddenException,
   Logger,
-  Inject,
-  forwardRef,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
-import { User, LoginStatus, LoginFailureReason } from '@app/common';
+import { User } from '@app/common';
 import { RegisterDto, LoginDto } from '../dto';
 import { IUserRepository, IRefreshTokenRepository } from '../repositories';
 import { TokenService } from './token.service';
 import { SessionService } from './session.service';
-import { PhoneService } from './phone.service';
-import { LoginHistoryService } from './login-history.service';
-import { RiskTrackingService, AttemptStatus } from './risk-tracking.service';
 import { TokensResponseDto, SessionDto } from '../dto';
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
-  private readonly maxDevices: number;
 
   constructor(
-    private readonly configService: ConfigService,
     private readonly userRepository: IUserRepository,
     private readonly refreshTokenRepository: IRefreshTokenRepository,
     private readonly tokenService: TokenService,
     private readonly sessionService: SessionService,
-    @Inject(forwardRef(() => PhoneService))
-    private readonly phoneService: PhoneService,
-    private readonly loginHistoryService: LoginHistoryService,
-    private readonly riskTrackingService: RiskTrackingService,
-  ) {
-    this.maxDevices = this.configService.get<number>('MAX_DEVICES_PER_USER', 3);
-  }
+  ) {}
 
   async register(dto: RegisterDto): Promise<User | null> {
-    // Check if email or phone already exists
+    // Check if email already exists
     // Return null silently to prevent user enumeration
     const existingEmail = await this.userRepository.findByEmail(dto.email);
     if (existingEmail) {
       this.logger.debug(
         `Registration attempt with existing email: ${dto.email}`,
-      );
-      return null;
-    }
-
-    const existingPhone = await this.userRepository.findByPhone(dto.phone);
-    if (existingPhone) {
-      this.logger.debug(
-        `Registration attempt with existing phone: ${dto.phone}`,
       );
       return null;
     }
@@ -64,266 +41,60 @@ export class AuthService {
     const user = this.userRepository.create({
       email: dto.email,
       passwordHash,
-      phone: dto.phone,
-      phoneVerified: false,
     });
 
-    const savedUser = await this.userRepository.save(user);
-
-    // Send verification SMS
-    try {
-      await this.phoneService.sendVerificationCode(dto.phone);
-    } catch (error) {
-      this.logger.warn(
-        `Failed to send verification SMS to ${dto.phone}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-    }
-
-    return savedUser;
+    return this.userRepository.save(user);
   }
+
   async login(
     dto: LoginDto,
     ipAddress: string | null,
     userAgent: string | null,
   ): Promise<TokensResponseDto & { refreshToken: string }> {
-    const { email, deviceFingerprint } = dto;
-
-    // Helper to build device info for login history
-    const deviceInfo = {
-      ipAddress,
-      userAgent,
-      deviceFingerprint,
-      deviceName: dto.deviceName,
-    };
-
-    // 1. Fingerprint-based rate limiting (general protection)
-    // Prevents same device from brute-forcing different emails
-    const fpRateLimitKey = `login:fp:${deviceFingerprint}`;
-    const fpAttempts = await this.sessionService.incrementRateLimit(
-      fpRateLimitKey,
-      15 * 60, // 15 minutes window
-    );
-    if (fpAttempts > 20) {
-      // Record rate limited attempt
-      await this.loginHistoryService.recordLogin({
-        userId: null,
-        email,
-        status: LoginStatus.FAILED,
-        failureReason: LoginFailureReason.RATE_LIMITED,
-        deviceInfo,
-      });
-      await this.recordRiskAttempt(
-        ipAddress,
-        email,
-        deviceFingerprint,
-        AttemptStatus.FAILED,
-      );
-      throw new BadRequestException(
-        'Too many login attempts from this device. Please try again later.',
-      );
-    }
-
-    // 2. Check if device is blocked for this email (5 failed attempts within 1 hour)
-    const isDeviceBlocked = await this.sessionService.isDeviceBlocked(
-      email,
-      deviceFingerprint,
-    );
-    if (isDeviceBlocked) {
-      // Record device blocked attempt
-      await this.loginHistoryService.recordLogin({
-        userId: null,
-        email,
-        status: LoginStatus.FAILED,
-        failureReason: LoginFailureReason.DEVICE_BLOCKED,
-        deviceInfo,
-      });
-      await this.recordRiskAttempt(
-        ipAddress,
-        email,
-        deviceFingerprint,
-        AttemptStatus.FAILED,
-      );
-      throw new ForbiddenException(
-        'Too many failed attempts from this device. Please try again after 1 hour.',
-      );
-    }
-
-    // 3. Find user
-    const user = await this.userRepository.findByEmail(email);
+    // 1. Find user
+    const user = await this.userRepository.findByEmail(dto.email);
     if (!user) {
-      // Increment device attempts even for non-existent user (prevent enumeration)
-      await this.handleFailedLogin(email, deviceFingerprint);
-      // Record invalid credentials (user not found)
-      await this.loginHistoryService.recordLogin({
-        userId: null,
-        email,
-        status: LoginStatus.FAILED,
-        failureReason: LoginFailureReason.INVALID_CREDENTIALS,
-        deviceInfo,
-      });
-      await this.recordRiskAttempt(
-        ipAddress,
-        email,
-        deviceFingerprint,
-        AttemptStatus.FAILED,
-      );
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // 4. Check if user is active
+    // 2. Check if user is active
     if (!user.isActive) {
-      // Record account disabled attempt
-      await this.loginHistoryService.recordLogin({
-        userId: user.id,
-        email,
-        status: LoginStatus.FAILED,
-        failureReason: LoginFailureReason.ACCOUNT_DISABLED,
-        deviceInfo,
-      });
-      await this.recordRiskAttempt(
-        ipAddress,
-        email,
-        deviceFingerprint,
-        AttemptStatus.FAILED,
-      );
       throw new UnauthorizedException(
         'Account is disabled. Please contact support.',
       );
     }
 
-    // 5. Verify password
+    // 3. Verify password
     const isPasswordValid = await bcrypt.compare(
       dto.password,
       user.passwordHash,
     );
     if (!isPasswordValid) {
-      await this.handleFailedLogin(email, deviceFingerprint, user);
-      // Record invalid credentials (wrong password)
-      await this.loginHistoryService.recordLogin({
-        userId: user.id,
-        email,
-        status: LoginStatus.FAILED,
-        failureReason: LoginFailureReason.INVALID_CREDENTIALS,
-        deviceInfo,
-      });
-      await this.recordRiskAttempt(
-        ipAddress,
-        email,
-        deviceFingerprint,
-        AttemptStatus.FAILED,
-      );
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // 6. Check phone verification (if phone exists)
-    if (!user.phoneVerified) {
-      // Record phone not verified attempt
-      await this.loginHistoryService.recordLogin({
-        userId: user.id,
-        email,
-        status: LoginStatus.FAILED,
-        failureReason: LoginFailureReason.PHONE_NOT_VERIFIED,
-        deviceInfo,
-      });
-      await this.recordRiskAttempt(
-        ipAddress,
-        email,
-        deviceFingerprint,
-        AttemptStatus.FAILED,
-      );
-      throw new ForbiddenException('Phone number not verified');
-    }
-
-    const existingSession = await this.sessionService.findSessionByFingerprint(
-      user.id,
-      deviceFingerprint,
-    );
-
-    if (existingSession) {
-      // Same device - revoke old session and create new one
-      await this.sessionService.blacklistToken(existingSession.jti);
-      await this.sessionService.deleteSession(user.id, existingSession.jti);
-      await this.refreshTokenRepository.revokeByDeviceFingerprint(
-        user.id,
-        deviceFingerprint,
-      );
-      this.logger.log(
-        `Replaced existing session for user ${user.id} on device ${deviceFingerprint}`,
-      );
-    } else {
-      // New device - check device limit
-      const activeSessionsCount = await this.sessionService.countSessions(
-        user.id,
-      );
-      if (activeSessionsCount >= this.maxDevices) {
-        // Record max devices reached attempt
-        await this.loginHistoryService.recordLogin({
-          userId: user.id,
-          email,
-          status: LoginStatus.FAILED,
-          failureReason: LoginFailureReason.MAX_DEVICES_REACHED,
-          deviceInfo,
-        });
-        await this.recordRiskAttempt(
-          ipAddress,
-          email,
-          deviceFingerprint,
-          AttemptStatus.FAILED,
-        );
-        throw new ForbiddenException(
-          `Maximum ${this.maxDevices} devices allowed. Please logout from another device.`,
-        );
-      }
-    }
-
-    // 8. Generate tokens
+    // 4. Generate tokens
     const { token: accessToken, jti } =
       await this.tokenService.generateAccessToken(user);
     const refreshTokenData = await this.tokenService.generateRefreshToken(
       user.id,
     );
 
-    // 9. Save refresh token to DB
+    // 5. Save refresh token to DB
     const refreshTokenEntity = this.refreshTokenRepository.create({
       tokenHash: refreshTokenData.hash,
       userId: user.id,
-      deviceFingerprint,
-      deviceName: dto.deviceName,
       userAgent,
       ipAddress,
       expiresAt: refreshTokenData.expiresAt,
     });
     await this.refreshTokenRepository.save(refreshTokenEntity);
 
-    // 10. Create session in Redis
+    // 6. Create session in Redis
     await this.sessionService.createSession(user.id, jti, {
-      deviceFingerprint,
-      deviceName: dto.deviceName,
       ipAddress,
       userAgent,
     });
-
-    // 11. Reset rate limits on successful login
-    await this.sessionService.resetRateLimit(fpRateLimitKey);
-    await this.sessionService.resetDeviceLoginAttempts(
-      email,
-      deviceFingerprint,
-    );
-
-    // 12. Record successful login
-    await this.loginHistoryService.recordLogin({
-      userId: user.id,
-      email,
-      status: LoginStatus.SUCCESS,
-      sessionJti: jti,
-      deviceInfo,
-    });
-    await this.recordRiskAttempt(
-      ipAddress,
-      email,
-      deviceFingerprint,
-      AttemptStatus.SUCCESS,
-    );
 
     return {
       accessToken,
@@ -331,39 +102,6 @@ export class AuthService {
       tokenType: 'Bearer',
       refreshToken: refreshTokenData.token,
     };
-  }
-
-  private async handleFailedLogin(
-    email: string,
-    deviceFingerprint: string,
-    user?: User,
-  ): Promise<void> {
-    // Increment device login attempts
-    const attempts = await this.sessionService.incrementDeviceLoginAttempts(
-      email,
-      deviceFingerprint,
-    );
-
-    // If reached max attempts, increment block count
-    if (attempts >= 5) {
-      const blockCount = await this.sessionService.incrementDeviceBlockCount(
-        email,
-        deviceFingerprint,
-      );
-
-      this.logger.warn(
-        `Device ${deviceFingerprint} blocked for email ${email}. Block count: ${blockCount}`,
-      );
-
-      // If reached max blocks, deactivate account (only if still active)
-      if (blockCount >= 3 && user && user.isActive) {
-        await this.userRepository.deactivate(user.id);
-        this.logger.error(
-          `Account ${email} deactivated due to too many failed login attempts`,
-        );
-        // TODO: Send email notification to user about account deactivation
-      }
-    }
   }
 
   async refresh(
@@ -411,8 +149,6 @@ export class AuthService {
     const newRefreshTokenEntity = this.refreshTokenRepository.create({
       tokenHash: newRefreshTokenData.hash,
       userId: user.id,
-      deviceFingerprint: validatedToken.deviceFingerprint,
-      deviceName: validatedToken.deviceName,
       userAgent: validatedToken.userAgent,
       ipAddress: validatedToken.ipAddress,
       expiresAt: newRefreshTokenData.expiresAt,
@@ -421,8 +157,6 @@ export class AuthService {
 
     // Create new session
     await this.sessionService.createSession(user.id, jti, {
-      deviceFingerprint: validatedToken.deviceFingerprint,
-      deviceName: validatedToken.deviceName,
       ipAddress: validatedToken.ipAddress,
       userAgent: validatedToken.userAgent,
     });
@@ -436,22 +170,14 @@ export class AuthService {
   }
 
   async logout(userId: string, jti: string): Promise<void> {
-    // 1. Get session first (need fingerprint for refresh token revocation)
-    const session = await this.sessionService.getSession(userId, jti);
-
-    // 2. Blacklist current access token
+    // 1. Blacklist current access token
     await this.sessionService.blacklistToken(jti);
 
-    // 3. Delete session from Redis
+    // 2. Delete session from Redis
     await this.sessionService.deleteSession(userId, jti);
 
-    // 4. Revoke refresh token for this session (by device fingerprint)
-    if (session) {
-      await this.refreshTokenRepository.revokeByDeviceFingerprint(
-        userId,
-        session.deviceFingerprint,
-      );
-    }
+    // 3. Revoke all refresh tokens for user (simple approach without fingerprint)
+    await this.refreshTokenRepository.revokeAllByUserId(userId);
   }
 
   async logoutAll(userId: string): Promise<void> {
@@ -474,9 +200,8 @@ export class AuthService {
 
     return sessions.map(({ jti, data }) => ({
       id: jti,
-      deviceFingerprint: data.deviceFingerprint,
-      deviceName: data.deviceName,
       ipAddress: data.ipAddress,
+      userAgent: data.userAgent,
       createdAt: new Date(data.createdAt),
       current: jti === currentJti,
     }));
@@ -497,14 +222,7 @@ export class AuthService {
     await this.sessionService.blacklistToken(sessionId);
 
     // Delete session
-    const session = await this.sessionService.getSession(userId, sessionId);
-    if (session) {
-      await this.sessionService.deleteSession(userId, sessionId);
-      await this.refreshTokenRepository.revokeByDeviceFingerprint(
-        userId,
-        session.deviceFingerprint,
-      );
-    }
+    await this.sessionService.deleteSession(userId, sessionId);
   }
 
   async validateUser(email: string, password: string): Promise<User | null> {
@@ -515,21 +233,5 @@ export class AuthService {
     if (!isPasswordValid) return null;
 
     return user;
-  }
-
-  private async recordRiskAttempt(
-    ipAddress: string | null,
-    email: string,
-    fingerprint: string,
-    status: AttemptStatus,
-  ): Promise<void> {
-    if (!ipAddress) return;
-
-    await this.riskTrackingService.recordAttempt({
-      ip: ipAddress,
-      email,
-      fingerprint,
-      status,
-    });
   }
 }

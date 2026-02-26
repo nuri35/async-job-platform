@@ -26,14 +26,11 @@ export class SessionDto {
   @ApiProperty({ example: 'uuid' })
   id: string;
 
-  @ApiProperty({ example: 'd4e5f6a7b8c9' })
-  deviceFingerprint: string;
-
-  @ApiProperty({ example: 'Chrome - Windows' })
-  deviceName: string;
-
   @ApiProperty({ example: '192.168.1.1' })
   ipAddress: string | null;
+
+  @ApiProperty({ example: 'Mozilla/5.0 ...' })
+  userAgent: string | null;
 
   @ApiProperty({ example: '2024-01-15T10:00:00Z' })
   createdAt: Date;

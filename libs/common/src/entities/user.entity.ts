@@ -20,13 +20,6 @@ export class User {
   @Index()
   email: string;
 
-  @Column({ type: 'varchar', length: 20, unique: true, nullable: true })
-  @Index()
-  phone: string | null;
-
-  @Column({ default: false })
-  phoneVerified: boolean;
-
   @Column()
   passwordHash: string;
 
