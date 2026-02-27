@@ -38,6 +38,8 @@ import { JwtAuthGuard } from '../guards';
 import { Public, CurrentUser } from '../decorators';
 import { CsrfForAuthGuard } from '../../../common/guards';
 
+//  sınırlarmıızı bılıyoruz.... auth bunu dusunerek ai da bunu bılyıor bende bunu dusuner auth modulu yazacagız + busınss busıness guvenlık felan perforamnce felan  plan modu dosyalarıyla gelitşriecegız
+// boylelıkle hızlı bıtıecek..... en sonbaktıgımzıda heryerıne bu konuları dusunerek busıness guvenlık performance olarakda dusundumuz ıcın bıtınce rahatyıacagız ama en son tekrar bu konualrı dusunerek de eklemeler ypaıp uygulama hızlı bıtıcek...
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
