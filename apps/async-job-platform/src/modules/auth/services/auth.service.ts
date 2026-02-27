@@ -235,3 +235,6 @@ export class AuthService {
     return user;
   }
 }
+
+// todo: bu endpointler plan modedakıler eklenınce her endpoint + bir skilll ile + bizim projenın sınırlılıklarını soylıyerek bu endpointlerin içerisine
+// + yenı auth'A a birşey gelme ile ligil busıness + guvenlık acısından soracagıız buda spuper olacak....
