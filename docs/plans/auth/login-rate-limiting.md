@@ -3,7 +3,7 @@
 ## Scope
 
 Login endpoint'e multi-layer rate limiting ekle. Lock tetiklendiğinde RabbitMQ üzerinden bildirim emaili gönder. Sadece bu plandaki dosyalarla çalış.
-
+ Global limiti login + window sliding pattern...
 ## Flow
 
 ```

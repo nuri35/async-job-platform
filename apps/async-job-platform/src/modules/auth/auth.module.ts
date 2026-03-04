@@ -7,7 +7,12 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { User, RefreshToken } from '@app/common';
 import { RedisConfig } from '../../config';
 import { AuthController } from './controllers';
-import { AuthService, TokenService, SessionService } from './services';
+import {
+  AuthService,
+  TokenService,
+  SessionService,
+  EmailService,
+} from './services';
 import {
   IUserRepository,
   UserRepository,
@@ -15,7 +20,12 @@ import {
   RefreshTokenRepository,
 } from './repositories';
 import { JwtStrategy, LocalStrategy } from './strategies';
-import { JwtAuthGuard, RolesGuard } from './guards';
+import {
+  JwtAuthGuard,
+  RolesGuard,
+  EmailVerifiedGuard,
+  RegisterRateLimitGuard,
+} from './guards';
 
 @Module({
   imports: [
@@ -50,6 +60,7 @@ import { JwtAuthGuard, RolesGuard } from './guards';
     AuthService,
     TokenService,
     SessionService,
+    EmailService,
 
     // Repositories
     {
@@ -68,13 +79,17 @@ import { JwtAuthGuard, RolesGuard } from './guards';
     // Guards
     JwtAuthGuard,
     RolesGuard,
+    EmailVerifiedGuard,
+    RegisterRateLimitGuard,
   ],
   exports: [
     AuthService,
     TokenService,
     SessionService,
+    EmailService,
     JwtAuthGuard,
     RolesGuard,
+    EmailVerifiedGuard,
     IUserRepository,
   ],
 })

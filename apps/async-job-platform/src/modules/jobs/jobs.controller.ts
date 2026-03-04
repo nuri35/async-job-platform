@@ -24,6 +24,7 @@ import { JobsService } from './jobs.service';
 import { CreateJobDto, UpdateJobDto } from './dto';
 import { RateLimit } from '../../common/decorators';
 import { RateLimitGuard } from '../../common/guards';
+import { RequireEmailVerification } from '../auth/decorators';
 
 @ApiTags('Jobs')
 @Controller('jobs')
@@ -32,6 +33,7 @@ export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
 
   @Post()
+  @RequireEmailVerification()
   @RateLimit({ max: 10, timeWindow: '1 minute' })
   @ApiOperation({
     summary: 'Create a new job',

@@ -5,11 +5,14 @@ import {
   Logger,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { v4 as uuidv4 } from 'uuid';
 import { User } from '@app/common';
+import { ConfigService } from '@nestjs/config';
 import { RegisterDto, LoginDto } from '../dto';
 import { IUserRepository, IRefreshTokenRepository } from '../repositories';
 import { TokenService } from './token.service';
 import { SessionService } from './session.service';
+import { EmailService } from './email.service';
 import { TokensResponseDto, SessionDto } from '../dto';
 
 @Injectable()
@@ -21,6 +24,8 @@ export class AuthService {
     private readonly refreshTokenRepository: IRefreshTokenRepository,
     private readonly tokenService: TokenService,
     private readonly sessionService: SessionService,
+    private readonly emailService: EmailService,
+    private readonly configService: ConfigService,
   ) {}
 
   async register(dto: RegisterDto): Promise<User | null> {
@@ -43,7 +48,16 @@ export class AuthService {
       passwordHash,
     });
 
-    return this.userRepository.save(user);
+    const savedUser = await this.userRepository.save(user);
+
+    try {
+      await this.sendVerificationEmail(savedUser);
+    } catch (error) {
+      this.logger.error(
+        `Verification email failed for ${savedUser.email}: ${error}`,
+      );
+    }
+    return savedUser;
   }
 
   async login(
@@ -225,6 +239,71 @@ export class AuthService {
     await this.sessionService.deleteSession(userId, sessionId);
   }
 
+  async verifyEmail(token: string): Promise<void> {
+    const user = await this.userRepository.findOne({
+      emailVerificationToken: token,
+    });
+
+    if (
+      !user ||
+      !user.emailVerificationExpiresAt ||
+      user.emailVerificationExpiresAt < new Date()
+    ) {
+      throw new BadRequestException('Invalid or expired verification token');
+    }
+
+    user.isEmailVerified = true;
+    user.emailVerificationToken = null;
+    user.emailVerificationExpiresAt = null;
+    await this.userRepository.save(user);
+  }
+
+  async resendVerificationEmail(email: string): Promise<void> {
+    const user = await this.userRepository.findByEmail(email);
+
+    // Silent return for enumeration protection
+    if (!user || user.isEmailVerified) {
+      return;
+    }
+
+    // Rate limit: max 3 resends per email per hour
+    const rateLimitKey = `resend-verification:${email}`;
+    const count = await this.sessionService.incrementRateLimit(
+      rateLimitKey,
+      3600,
+    );
+    if (count > 3) {
+      this.logger.debug(
+        `Resend verification rate limit exceeded for: ${email}`,
+      );
+      return;
+    }
+
+    await this.sendVerificationEmail(user);
+  }
+
+  async sendVerificationEmail(user: User): Promise<void> {
+    const token = uuidv4();
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 24);
+
+    user.emailVerificationToken = token;
+    user.emailVerificationExpiresAt = expiresAt;
+    await this.userRepository.save(user);
+
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+    const verificationLink = `${frontendUrl}/verify-email?token=${token}`;
+
+    await this.emailService.sendMail(
+      user.email,
+      'Verify your email address',
+      `<p>Please verify your email by clicking the link below:</p>
+       <p><a href="${verificationLink}">${verificationLink}</a></p>
+       <p>This link expires in 24 hours.</p>`,
+    );
+  }
+
   async validateUser(email: string, password: string): Promise<User | null> {
     const user = await this.userRepository.findByEmail(email);
     if (!user) return null;
@@ -235,6 +314,3 @@ export class AuthService {
     return user;
   }
 }
-
-// todo: bu endpointler plan modedakıler eklenınce her endpoint + bir skilll ile + bizim projenın sınırlılıklarını soylıyerek bu endpointlerin içerisine
-// + yenı auth'A a birşey gelme ile ligil busıness + guvenlık acısından soracagıız buda spuper olacak....

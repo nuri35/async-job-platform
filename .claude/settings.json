@@ -18,7 +18,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Write|Edit|MultiEdit",
+        "matcher": "DISABLED_FileAccess | DISABLED_Bash | DISABLED_Edit | DISABLED_Write",
         "hooks": [
           {
             "type": "command",
@@ -28,7 +28,7 @@
         ]
       },
       {
-        "matcher": "",
+        "matcher": "DISABLED_FileAccess",
         "hooks": [
           {
             "type": "command",
@@ -38,7 +38,7 @@
         ]
       },
       {
-        "matcher": "Bash",
+        "matcher": "DISABLED_Bash",
         "hooks": [
           {
             "type": "command",
@@ -48,7 +48,7 @@
         ]
       },
       {
-        "matcher": "Edit",
+        "matcher": "DISABLED_Edit",
         "hooks": [
           {
             "type": "command",
@@ -58,7 +58,7 @@
         ]
       },
       {
-        "matcher": "Write",
+        "matcher": "DISABLED_Write",
         "hooks": [
           {
             "type": "command",

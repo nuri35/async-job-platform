@@ -33,13 +33,13 @@ import {
   RefreshTokenDto,
   TokensResponseDto,
   SessionDto,
+  VerifyEmailDto,
+  ResendVerificationDto,
 } from '../dto';
-import { JwtAuthGuard } from '../guards';
+import { JwtAuthGuard, RegisterRateLimitGuard } from '../guards';
 import { Public, CurrentUser } from '../decorators';
 import { CsrfForAuthGuard } from '../../../common/guards';
 
-//  sınırlarmıızı bılıyoruz.... auth bunu dusunerek ai da bunu bılyıor bende bunu dusuner auth modulu yazacagız + busınss busıness guvenlık felan perforamnce felan  plan modu dosyalarıyla gelitşriecegız
-// boylelıkle hızlı bıtıecek..... en sonbaktıgımzıda heryerıne bu konuları dusunerek busıness guvenlık performance olarakda dusundumuz ıcın bıtınce rahatyıacagız ama en son tekrar bu konualrı dusunerek de eklemeler ypaıp uygulama hızlı bıtıcek...
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
@@ -49,6 +49,7 @@ export class AuthController {
   ) {}
 
   @Public()
+  @UseGuards(RegisterRateLimitGuard)
   @Post('register')
   @ApiOperation({
     summary: 'Register a new user',
@@ -63,6 +64,10 @@ export class AuthController {
     status: 400,
     description: 'Validation error — invalid input data',
   })
+  @ApiResponse({
+    status: 429,
+    description: 'Too many registration attempts from this IP',
+  })
   async register(@Body() dto: RegisterDto) {
     await this.authService.register(dto);
 
@@ -70,6 +75,43 @@ export class AuthController {
     return {
       message:
         'If your email is not already registered, your account has been created.',
+    };
+  }
+
+  @Public()
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Verify email address',
+    description: 'Verifies user email using the token sent via email.',
+  })
+  @ApiBody({ type: VerifyEmailDto })
+  @ApiResponse({ status: 200, description: 'Email verification processed.' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired token.' })
+  async verifyEmail(@Body() dto: VerifyEmailDto) {
+    await this.authService.verifyEmail(dto.token);
+    return { message: 'Email verification processed.' };
+  }
+
+  @Public()
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Resend verification email',
+    description:
+      'Resends the verification email. Returns generic response regardless of outcome.',
+  })
+  @ApiBody({ type: ResendVerificationDto })
+  @ApiResponse({
+    status: 200,
+    description:
+      'If the email exists and is unverified, a new verification email has been sent.',
+  })
+  async resendVerification(@Body() dto: ResendVerificationDto) {
+    await this.authService.resendVerificationEmail(dto.email);
+    return {
+      message:
+        'If the email exists and is unverified, a new verification email has been sent.',
     };
   }
 

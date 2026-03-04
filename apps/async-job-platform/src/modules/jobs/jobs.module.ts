@@ -5,9 +5,10 @@ import { JobsController } from './jobs.controller';
 import { JobtesssController } from './jobtesss.controller';
 import { JobsService } from './jobs.service';
 import { JobsRepository, IJobsRepository } from './repositories';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Job])],
+  imports: [TypeOrmModule.forFeature([Job]), AuthModule],
   controllers: [JobsController, JobtesssController],
   providers: [
     JobsService,
