@@ -2,6 +2,19 @@ import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
 
+interface RedisWithCustomCommands extends Redis {
+  slidingWindowCheck(
+    windowKey: string,
+    lockKey: string,
+    now: number,
+    windowStart: number,
+    uniqueId: string,
+    windowSeconds: number,
+    threshold: number,
+    lockTtl: number,
+  ): Promise<[number, number]>;
+}
+
 const EMAIL_FAIL_THRESHOLD = 5;
 const IP_FAIL_THRESHOLD = 15;
 const WINDOW_SECONDS = 900; // 15 dakika sliding window
@@ -10,14 +23,59 @@ const NOTIFY_COOLDOWN_TTL = 3600; // 1 saat email cooldown
 const EMAIL_DELAY_START = 3; // 3. fail'den itibaren delay
 const IP_DELAY_START = 11; // 11. fail'den itibaren delay
 
+/**
+ * Lua script: sliding window + threshold check + lock — tek atomic operasyon.
+ *
+ * KEYS[1] = sliding window sorted set key
+ * KEYS[2] = lock/block key
+ *
+ * ARGV[1] = now (timestamp ms)
+ * ARGV[2] = window_start (timestamp ms)
+ * ARGV[3] = unique_id
+ * ARGV[4] = window_ttl (seconds)
+ * ARGV[5] = threshold
+ * ARGV[6] = lock_ttl (seconds)
+ *
+ * Returns: {count, locked} (as array [count, locked])
+ */
+const SLIDING_WINDOW_CHECK_LUA = `
+local window_key = KEYS[1]
+local lock_key = KEYS[2]
+
+local now = tonumber(ARGV[1])
+local window_start = tonumber(ARGV[2])
+local unique_id = ARGV[3]
+local window_ttl = tonumber(ARGV[4])
+local threshold = tonumber(ARGV[5])
+local lock_ttl = tonumber(ARGV[6])
+
+redis.call('ZREMRANGEBYSCORE', window_key, 0, window_start)
+redis.call('ZADD', window_key, now, unique_id)
+local count = redis.call('ZCARD', window_key)
+redis.call('EXPIRE', window_key, window_ttl)
+
+local locked = 0
+if count >= threshold then
+  redis.call('SET', lock_key, '1', 'EX', lock_ttl)
+  locked = 1
+end
+
+return {count, locked}
+`;
+
 @Injectable()
 export class LoginRateLimitService {
   private readonly logger = new Logger(LoginRateLimitService.name);
 
   constructor(
     @InjectRedis()
-    private readonly redis: Redis,
-  ) {}
+    private readonly redis: RedisWithCustomCommands,
+  ) {
+    this.redis.defineCommand('slidingWindowCheck', {
+      numberOfKeys: 2,
+      lua: SLIDING_WINDOW_CHECK_LUA,
+    });
+  }
 
   async checkIpBlocked(ip: string): Promise<void> {
     const blocked = await this.redis.get(`login:block:ip:${ip}`);
@@ -39,36 +97,43 @@ export class LoginRateLimitService {
     email: string,
     ip: string,
   ): Promise<{ delayMs: number; emailLocked: boolean }> {
-    const emailCount = await this.addToSlidingWindow(
+    const emailResult = await this.addToSlidingWindowAtomic(
       `login:sw:email:${email}`,
+      `login:lock:email:${email}`,
       WINDOW_SECONDS,
-    );
-    const ipCount = await this.addToSlidingWindow(
-      `login:sw:ip:${ip}`,
-      WINDOW_SECONDS,
+      EMAIL_FAIL_THRESHOLD,
     );
 
-    // Email threshold check
-    let emailLocked = false;
-    if (emailCount >= EMAIL_FAIL_THRESHOLD) {
-      await this.lockEmail(email);
-      emailLocked = true;
+    const ipResult = await this.addToSlidingWindowAtomic(
+      `login:sw:ip:${ip}`,
+      `login:block:ip:${ip}`,
+      WINDOW_SECONDS,
+      IP_FAIL_THRESHOLD,
+    );
+
+    if (emailResult.locked) {
       this.logger.warn(
-        `Email locked after ${emailCount} failed attempts: ${email}`,
+        `Email locked after ${emailResult.count} failed attempts: ${email}`,
       );
     }
 
-    // IP threshold check
-    if (ipCount >= IP_FAIL_THRESHOLD) {
-      await this.blockIp(ip);
-      this.logger.warn(`IP blocked after ${ipCount} failed attempts: ${ip}`);
+    if (ipResult.locked) {
+      this.logger.warn(
+        `IP blocked after ${ipResult.count} failed attempts: ${ip}`,
+      );
     }
 
     // Progressive delay — take the higher delay
-    const emailDelay = this.calculateDelay(emailCount, EMAIL_DELAY_START);
-    const ipDelay = this.calculateDelay(ipCount, IP_DELAY_START);
+    const emailDelay = this.calculateDelay(
+      emailResult.count,
+      EMAIL_DELAY_START,
+    );
+    const ipDelay = this.calculateDelay(ipResult.count, IP_DELAY_START);
 
-    return { delayMs: Math.max(emailDelay, ipDelay), emailLocked };
+    return {
+      delayMs: Math.max(emailDelay, ipDelay),
+      emailLocked: emailResult.locked,
+    };
   }
 
   async clearEmailCounters(email: string): Promise<void> {
@@ -85,32 +150,31 @@ export class LoginRateLimitService {
     return true;
   }
 
-  private async addToSlidingWindow(
-    key: string,
+  private async addToSlidingWindowAtomic(
+    windowKey: string,
+    lockKey: string,
     windowSeconds: number,
-  ): Promise<number> {
+    threshold: number,
+  ): Promise<{ count: number; locked: boolean }> {
     const now = Date.now();
     const windowStart = now - windowSeconds * 1000;
     const uniqueId = `${now}:${Math.random().toString(36).slice(2, 8)}`;
 
-    const pipeline = this.redis.pipeline();
-    pipeline.zremrangebyscore(key, 0, windowStart); // eskileri sil
-    pipeline.zadd(key, now, uniqueId); // yeni fail ekle
-    pipeline.zcard(key); // toplam say
-    pipeline.expire(key, windowSeconds); // TTL güvenlik
+    const result = await this.redis.slidingWindowCheck(
+      windowKey,
+      lockKey,
+      now,
+      windowStart,
+      uniqueId,
+      windowSeconds,
+      threshold,
+      LOCK_TTL,
+    );
 
-    const results = await pipeline.exec();
-    const count = results![2][1] as number; // zcard sonucu
-
-    return count;
-  }
-
-  private async lockEmail(email: string): Promise<void> {
-    await this.redis.set(`login:lock:email:${email}`, '1', 'EX', LOCK_TTL);
-  }
-
-  private async blockIp(ip: string): Promise<void> {
-    await this.redis.set(`login:block:ip:${ip}`, '1', 'EX', LOCK_TTL);
+    return {
+      count: result[0],
+      locked: result[1] === 1,
+    };
   }
 
   private async setNotifyCooldown(email: string): Promise<void> {
