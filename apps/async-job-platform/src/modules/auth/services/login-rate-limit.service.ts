@@ -142,12 +142,14 @@ export class LoginRateLimitService {
 
   async shouldNotifyLock(email: string): Promise<boolean> {
     const cooldownKey = `login:lock-notify:${email}`;
-    const exists = await this.redis.get(cooldownKey);
-    if (exists) {
-      return false;
-    }
-    await this.setNotifyCooldown(email);
-    return true;
+    const result = await this.redis.set(
+      cooldownKey,
+      '1',
+      'EX',
+      NOTIFY_COOLDOWN_TTL,
+      'NX',
+    );
+    return result === 'OK';
   }
 
   private async addToSlidingWindowAtomic(
@@ -175,15 +177,6 @@ export class LoginRateLimitService {
       count: result[0],
       locked: result[1] === 1,
     };
-  }
-
-  private async setNotifyCooldown(email: string): Promise<void> {
-    await this.redis.set(
-      `login:lock-notify:${email}`,
-      '1',
-      'EX',
-      NOTIFY_COOLDOWN_TTL,
-    );
   }
 
   private calculateDelay(count: number, delayStart: number): number {
