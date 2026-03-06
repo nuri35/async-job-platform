@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule, JwtModuleOptions } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { RedisModule } from '@nestjs-modules/ioredis';
+import { ClientsModule, Transport } from '@nestjs/microservices';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { User, RefreshToken } from '@app/common';
 import { RedisConfig } from '../../config';
@@ -12,6 +13,8 @@ import {
   TokenService,
   SessionService,
   EmailService,
+  LoginRateLimitService,
+  EmailQueueService,
 } from './services';
 import {
   IUserRepository,
@@ -53,6 +56,25 @@ import {
     RedisModule.forRootAsync({
       useClass: RedisConfig,
     }),
+
+    ClientsModule.registerAsync([
+      {
+        name: 'EMAIL_SERVICE',
+        imports: [ConfigModule],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [
+              `amqp://${configService.get('RABBITMQ_USER')}:${configService.get('RABBITMQ_PASSWORD')}@${configService.get('RABBITMQ_HOST')}:${configService.get('RABBITMQ_PORT')}`,
+            ],
+            queue: 'email_queue',
+            queueOptions: { durable: true },
+            prefetchCount: 1,
+          },
+        }),
+        inject: [ConfigService],
+      },
+    ]),
   ],
   controllers: [AuthController],
   providers: [
@@ -61,6 +83,8 @@ import {
     TokenService,
     SessionService,
     EmailService,
+    LoginRateLimitService,
+    EmailQueueService,
 
     // Repositories
     {

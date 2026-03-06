@@ -1,2 +1,2 @@
-// Exception filters
-// Example: export * from './http-exception.filter';
+export * from './login-throttle.exception';
+export * from './login-throttle-exception.filter';

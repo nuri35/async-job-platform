@@ -6,6 +6,7 @@ import {
   Body,
   Param,
   UseGuards,
+  UseFilters,
   HttpCode,
   HttpStatus,
   Res,
@@ -39,6 +40,7 @@ import {
 import { JwtAuthGuard, RegisterRateLimitGuard } from '../guards';
 import { Public, CurrentUser } from '../decorators';
 import { CsrfForAuthGuard } from '../../../common/guards';
+import { LoginThrottleExceptionFilter } from '../../../common/filters';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -140,8 +142,9 @@ export class AuthController {
   })
   @ApiResponse({
     status: 429,
-    description: 'Too many requests — rate limit exceeded',
+    description: 'Too many login attempts — includes Retry-After header',
   })
+  @UseFilters(LoginThrottleExceptionFilter)
   async login(
     @Body() dto: LoginDto,
     @Req() req: FastifyRequest,

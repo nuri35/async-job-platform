@@ -4,7 +4,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
+import { hash, verify } from '@node-rs/argon2';
 import { v4 as uuidv4 } from 'uuid';
 import { User } from '@app/common';
 import { ConfigService } from '@nestjs/config';
@@ -13,6 +13,9 @@ import { IUserRepository, IRefreshTokenRepository } from '../repositories';
 import { TokenService } from './token.service';
 import { SessionService } from './session.service';
 import { EmailService } from './email.service';
+import { LoginRateLimitService } from './login-rate-limit.service';
+import { EmailQueueService } from './email-queue.service';
+import { LoginThrottleException } from '../../../common/filters';
 import { TokensResponseDto, SessionDto } from '../dto';
 
 @Injectable()
@@ -25,6 +28,8 @@ export class AuthService {
     private readonly tokenService: TokenService,
     private readonly sessionService: SessionService,
     private readonly emailService: EmailService,
+    private readonly loginRateLimitService: LoginRateLimitService,
+    private readonly emailQueueService: EmailQueueService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -40,7 +45,7 @@ export class AuthService {
     }
 
     // Hash password
-    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const passwordHash = await hash(dto.password);
 
     // Create user
     const user = this.userRepository.create({
@@ -65,36 +70,49 @@ export class AuthService {
     ipAddress: string | null,
     userAgent: string | null,
   ): Promise<TokensResponseDto & { refreshToken: string }> {
-    // 1. Find user
+    // 1. Rate limit kontrolleri (mevcut logic'ten ÖNCE)
+    await this.loginRateLimitService.checkIpBlocked(ipAddress || 'unknown');
+    await this.loginRateLimitService.checkEmailLocked(dto.email);
+
+    // 2. Find user
     const user = await this.userRepository.findByEmail(dto.email);
     if (!user) {
+      await this.handleFailedLogin(dto.email, ipAddress);
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // 2. Check if user is active
+    // 3. Check if user is active
     if (!user.isActive) {
-      throw new UnauthorizedException(
-        'Account is disabled. Please contact support.',
-      );
-    }
-
-    // 3. Verify password
-    const isPasswordValid = await bcrypt.compare(
-      dto.password,
-      user.passwordHash,
-    );
-    if (!isPasswordValid) {
+      this.logger.debug(`Login attempt on disabled account: ${dto.email}`);
+      await this.handleFailedLogin(dto.email, ipAddress);
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // 4. Generate tokens
+    // 4. Check if email is verified
+    if (!user.isEmailVerified) {
+      this.logger.debug(`Login attempt with unverified email: ${dto.email}`);
+      await this.handleFailedLogin(dto.email, ipAddress);
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // 5. Verify password
+    const isPasswordValid = await verify(user.passwordHash, dto.password);
+    if (!isPasswordValid) {
+      await this.handleFailedLogin(dto.email, ipAddress);
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // 6. Başarılı login — email counter'ları temizle
+    await this.loginRateLimitService.clearEmailCounters(dto.email);
+
+    // 7. Generate tokens
     const { token: accessToken, jti } =
       await this.tokenService.generateAccessToken(user);
     const refreshTokenData = await this.tokenService.generateRefreshToken(
       user.id,
     );
 
-    // 5. Save refresh token to DB
+    // 8. Save refresh token to DB
     const refreshTokenEntity = this.refreshTokenRepository.create({
       tokenHash: refreshTokenData.hash,
       userId: user.id,
@@ -104,7 +122,7 @@ export class AuthService {
     });
     await this.refreshTokenRepository.save(refreshTokenEntity);
 
-    // 6. Create session in Redis
+    // 9. Create session in Redis
     await this.sessionService.createSession(user.id, jti, {
       ipAddress,
       userAgent,
@@ -116,6 +134,32 @@ export class AuthService {
       tokenType: 'Bearer',
       refreshToken: refreshTokenData.token,
     };
+  }
+
+  private async handleFailedLogin(
+    email: string,
+    ipAddress: string | null,
+  ): Promise<void> {
+    const { delayMs, emailLocked } =
+      await this.loginRateLimitService.recordFailedAttempt(
+        email,
+        ipAddress || 'unknown',
+      );
+
+    // Sadece lock tetiklendiğinde notify kontrolü yap
+    if (emailLocked) {
+      const shouldNotify =
+        await this.loginRateLimitService.shouldNotifyLock(email);
+      if (shouldNotify) {
+        this.emailQueueService.publishLockNotification(email);
+      }
+    }
+
+    // Progressive delay varsa → 429 + Retry-After, sleep yok
+    if (delayMs > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      throw new LoginThrottleException(Math.ceil(delayMs / 1000));
+    }
   }
 
   async refresh(
@@ -308,7 +352,7 @@ export class AuthService {
     const user = await this.userRepository.findByEmail(email);
     if (!user) return null;
 
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    const isPasswordValid = await verify(user.passwordHash, password);
     if (!isPasswordValid) return null;
 
     return user;
