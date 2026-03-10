@@ -12,7 +12,7 @@ import { RegisterDto, LoginDto } from '../dto';
 import { IUserRepository, IRefreshTokenRepository } from '../repositories';
 import { TokenService } from './token.service';
 import { SessionService } from './session.service';
-import { EmailService } from './email.service';
+import { EmailService } from '@app/common';
 import { LoginRateLimitService } from './login-rate-limit.service';
 import { EmailQueueService } from './email-queue.service';
 import { LoginThrottleException } from '../../../common/filters';

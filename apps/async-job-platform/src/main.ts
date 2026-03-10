@@ -5,11 +5,19 @@ import {
 } from '@nestjs/platform-fastify';
 import { ValidationPipe, Logger, VersioningType } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { Transport, MicroserviceOptions } from '@nestjs/microservices';
+import { ConfigService } from '@nestjs/config';
 import helmet from '@fastify/helmet';
 import fastifyCors from '@fastify/cors';
 import fastifyCompress from '@fastify/compress';
 import fastifyCookie from '@fastify/cookie';
 import fastifyCsrf from '@fastify/csrf-protection';
+import {
+  QUEUE_NAMES,
+  ROUTING_KEYS,
+  RMQ_EXCHANGE,
+  RabbitmqModule,
+} from '@app/common';
 
 import { AppModule } from './app.module';
 
@@ -184,6 +192,33 @@ Bu API, asenkron iş kuyruğu yönetimi için tasarlanmıştır.
   // Graceful Shutdown
   app.enableShutdownHooks();
 
+  // Embedded RabbitMQ Consumer — Hybrid Application Pattern
+  const configService = app.get(ConfigService);
+  const rmqUrl = RabbitmqModule.buildUrl(configService);
+
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.RMQ,
+    options: {
+      urls: [rmqUrl],
+      queue: QUEUE_NAMES.EMAIL,
+      queueOptions: {
+        durable: true,
+        arguments: {
+          'x-dead-letter-exchange': '',
+          'x-dead-letter-routing-key': QUEUE_NAMES.EMAIL_DLQ,
+        },
+      },
+      // Topic exchange — email.# pattern'i ile bind
+      exchange: RMQ_EXCHANGE.NAME,
+      exchangeType: RMQ_EXCHANGE.TYPE,
+      routingKey: ROUTING_KEYS.EMAIL_ALL, // 'email.#'
+      noAck: false,
+      prefetchCount: 1,
+    },
+  });
+
+  await app.startAllMicroservices();
+
   const port = process.env.API_PORT || process.env.PORT || 3000;
   const host = '0.0.0.0';
 
@@ -192,6 +227,7 @@ Bu API, asenkron iş kuyruğu yönetimi için tasarlanmıştır.
   logger.log(`Application running on: ${await app.getUrl()}`);
   logger.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   logger.log(`API Prefix: /api/v1`);
+  logger.log(`RabbitMQ consumer connected (email_queue)`);
 }
 
 bootstrap().catch((err) => {

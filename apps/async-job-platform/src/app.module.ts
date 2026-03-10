@@ -2,8 +2,14 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { APP_GUARD } from '@nestjs/core';
+import { RabbitmqModule } from '@app/common';
 import { DatabaseConfig } from './config';
-import { JobsModule, AuthModule, JwtAuthGuard } from './modules';
+import {
+  JobsModule,
+  AuthModule,
+  JwtAuthGuard,
+  EmailConsumerModule,
+} from './modules';
 
 @Module({
   imports: [
@@ -16,8 +22,11 @@ import { JobsModule, AuthModule, JwtAuthGuard } from './modules';
       useClass: DatabaseConfig,
     }),
 
+    RabbitmqModule.forRoot(),
+
     AuthModule,
     JobsModule,
+    EmailConsumerModule,
   ],
   providers: [
     // Global JWT Auth Guard - all routes require authentication by default
