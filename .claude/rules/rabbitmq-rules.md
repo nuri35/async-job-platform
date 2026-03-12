@@ -1,3 +1,11 @@
+---
+paths:
+  - "libs/common/src/rabbitmq/**/*"
+  - "apps/async-job-platform/src/modules/email-consumer/**/*"
+  - "apps/async-job-platform/src/main.ts"
+  - "apps/async-job-platform/src/modules/auth/services/email-queue*"
+---
+
 # RabbitMQ Rules
 
 ## Topic Exchange

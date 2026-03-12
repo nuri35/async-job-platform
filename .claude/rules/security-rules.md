@@ -1,3 +1,10 @@
+---
+paths:
+  - "apps/async-job-platform/src/modules/auth/**/*"
+  - "libs/common/src/entities/login-audit*"
+  - "libs/common/src/enums/login-*"
+---
+
 # Security Rules
 
 ## Enumeration Protection

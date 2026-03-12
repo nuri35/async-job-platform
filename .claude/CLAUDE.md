@@ -8,9 +8,9 @@
 - Fail output'larında sadece error summary göster, full stack trace basma
 - Implementasyon öncesi ilgili plan dosyasını oku, tüm plan dosyalarını değil
 - Her değişiklik sonrası `npm run build` çalıştır
-- Security kuralları: `.claude/rules/security-rules.md`
-- RabbitMQ kuralları: `.claude/rules/rabbitmq-rules.md`
-- Auth modül detayları: `modules/auth/CLAUDE.md`
+- Security kuralları: `.claude/rules/security-rules.md` (auth dosyalarıyla çalışırken otomatik yüklenir)
+- RabbitMQ kuralları: `.claude/rules/rabbitmq-rules.md` (queue dosyalarıyla çalışırken otomatik yüklenir)
+- Auth modül detayları: `modules/auth/CLAUDE.md` (auth klasöründe çalışırken otomatik yüklenir)
 
 ## Proje
 
