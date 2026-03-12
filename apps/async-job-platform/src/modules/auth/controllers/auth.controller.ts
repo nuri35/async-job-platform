@@ -123,26 +123,38 @@ export class AuthController {
   @ApiOperation({
     summary: 'Login with email and password',
     description:
-      'Authenticates user with email and password. Returns JWT access token in body and sets refresh token as HttpOnly cookie.',
+      'Authenticates user with email and password. Returns JWT access token in body and sets refresh token as HttpOnly cookie.\n\n' +
+      '**Rate limiting behaviour:**\n' +
+      '- After 5 consecutive failed attempts for an email address, that email is temporarily locked and a notification email is queued via RabbitMQ.\n' +
+      '- After 15 consecutive failed attempts from the same IP address, that IP is temporarily blocked.\n' +
+      '- Progressive delay is applied between attempts.\n\n' +
+      '**Enumeration protection:** All failure scenarios (wrong password, disabled account, unverified email, locked email, blocked IP) return the same 401 "Invalid credentials" response.',
   })
   @ApiBody({ type: LoginDto })
   @ApiResponse({
     status: 200,
-    description: 'Login successful',
+    description:
+      'Login successful — access token returned in body, refresh token set as HttpOnly cookie.',
     type: TokensResponseDto,
   })
   @ApiResponse({
     status: 400,
     description: 'Validation error — invalid email or password format',
   })
-  @ApiResponse({ status: 401, description: 'Invalid credentials' })
   @ApiResponse({
-    status: 403,
-    description: 'Account disabled',
+    status: 401,
+    description:
+      'Invalid credentials — covers all failure scenarios: wrong password, disabled account, unverified email, locked email (5 failed attempts), blocked IP (15 failed attempts). Same response is returned intentionally to prevent user enumeration.',
   })
   @ApiResponse({
     status: 429,
-    description: 'Too many login attempts — includes Retry-After header',
+    description:
+      'Too many requests — rate limit exceeded. Response includes a Retry-After header indicating when the next attempt is allowed.',
+  })
+  @ApiHeader({
+    name: 'Retry-After',
+    description: 'Seconds to wait before retrying (present on 429 responses)',
+    required: false,
   })
   @UseFilters(LoginThrottleExceptionFilter)
   async login(

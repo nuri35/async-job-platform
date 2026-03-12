@@ -151,7 +151,13 @@ export class AuthService {
       const shouldNotify =
         await this.loginRateLimitService.shouldNotifyLock(email);
       if (shouldNotify) {
-        this.emailQueueService.publishLockNotification(email);
+        try {
+          this.emailQueueService.publishLockNotification(email);
+        } catch (error) {
+          this.logger.error(
+            `Failed to publish lock notification for ${email}: ${error}`,
+          );
+        }
       }
     }
 

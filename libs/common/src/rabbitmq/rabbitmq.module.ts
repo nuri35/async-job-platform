@@ -64,7 +64,13 @@ export class RabbitmqModule {
               options: {
                 urls: [RabbitmqModule.buildUrl(configService)],
                 queue: queueName,
-                queueOptions: { durable: true },
+                queueOptions: {
+                  durable: true,
+                  arguments: {
+                    'x-dead-letter-exchange': '',
+                    'x-dead-letter-routing-key': `${queueName}_dlq`,
+                  },
+                },
                 exchange: RMQ_EXCHANGE.NAME,
                 exchangeType: RMQ_EXCHANGE.TYPE,
                 prefetchCount: 1,

@@ -3,14 +3,17 @@ import { Transform } from 'class-transformer';
 import { IsEmail, IsString, IsNotEmpty } from 'class-validator';
 
 export class LoginDto {
-  @ApiProperty({ example: 'user@example.com' })
+  @ApiProperty({
+    description: 'Registered email address',
+    example: 'user@example.com',
+  })
   @Transform(({ value }) =>
     typeof value === 'string' ? value.trim().toLowerCase() : value,
   )
   @IsEmail()
   email: string;
 
-  @ApiProperty({ example: 'Password123' })
+  @ApiProperty({ description: 'Account password', example: 'Password123' })
   @IsString()
   @IsNotEmpty()
   password: string;

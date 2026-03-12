@@ -16,10 +16,18 @@ export class EmailQueueService {
    * Topic exchange üzerinden email_queue'ya yönlenir (email.# binding)
    */
   publishLockNotification(email: string): void {
-    this.client.emit(ROUTING_KEYS.EMAIL_LOCK, {
-      email,
-      timestamp: new Date().toISOString(),
-    });
+    this.client
+      .emit(ROUTING_KEYS.EMAIL_LOCK, {
+        email,
+        timestamp: new Date().toISOString(),
+      })
+      .subscribe({
+        error: (err: unknown) => {
+          this.logger.error(
+            `Failed to publish lock notification for ${email}: ${err}`,
+          );
+        },
+      });
     this.logger.debug(`Lock notification queued for: ${email}`);
   }
 }
